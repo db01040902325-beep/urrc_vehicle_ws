@@ -1,0 +1,408 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+
+<model name="urrc_car">
+
+  <static>false</static>
+  <self_collide>false</self_collide>
+
+  <!-- =========================
+       CHASSIS
+       +X = 차량 앞
+       ========================= -->
+  <link name="chassis">
+
+    <inertial>
+      <mass>3.0</mass>
+      <inertia>
+        <ixx>0.015</ixx>
+        <iyy>0.055</iyy>
+        <izz>0.065</izz>
+      </inertia>
+    </inertial>
+
+    <collision name="body_collision">
+      <pose>0 0 -0.020 0 0 0</pose>
+      <geometry>
+        <box>
+          <size>0.460 0.180 0.080</size>
+        </box>
+      </geometry>
+    </collision>
+
+    <visual name="body_visual">
+      <pose>0 0 -0.020 0 0 0</pose>
+      <geometry>
+        <box>
+          <size>0.460 0.180 0.080</size>
+        </box>
+      </geometry>
+
+      <material>
+        <ambient>0.10 0.25 0.90 1</ambient>
+        <diffuse>0.10 0.25 0.90 1</diffuse>
+      </material>
+    </visual>
+
+    <!-- 차량 앞쪽 표시 -->
+    <visual name="front_marker">
+      <pose>0.215 0 0.025 0 0 0</pose>
+      <geometry>
+        <box>
+          <size>0.025 0.100 0.020</size>
+        </box>
+      </geometry>
+
+      <material>
+        <ambient>1 0.1 0.1 1</ambient>
+        <diffuse>1 0.1 0.1 1</diffuse>
+      </material>
+    </visual>
+
+  </link>
+
+
+  <!-- =========================
+       FRONT STEERING LINKS
+       ========================= -->
+
+  <link name="front_left_steering_link">
+    <pose>0.150 0.095 -0.075 0 0 0</pose>
+
+    <inertial>
+      <mass>0.05</mass>
+      <inertia>
+        <ixx>0.0001</ixx>
+        <iyy>0.0001</iyy>
+        <izz>0.0001</izz>
+      </inertia>
+    </inertial>
+  </link>
+
+  <link name="front_right_steering_link">
+    <pose>0.150 -0.095 -0.075 0 0 0</pose>
+
+    <inertial>
+      <mass>0.05</mass>
+      <inertia>
+        <ixx>0.0001</ixx>
+        <iyy>0.0001</iyy>
+        <izz>0.0001</izz>
+      </inertia>
+    </inertial>
+  </link>
+
+
+  <!-- =========================
+       WHEELS
+       ========================= -->
+
+  <link name="front_left_wheel">
+    <pose>0.150 0.095 -0.075 -1.5707963 0 0</pose>
+
+    <inertial>
+      <mass>0.12</mass>
+      <inertia>
+        <ixx>0.00013</ixx>
+        <iyy>0.00013</iyy>
+        <izz>0.00007</izz>
+      </inertia>
+    </inertial>
+
+    <collision name="collision">
+      <geometry>
+        <cylinder>
+          <radius>0.045</radius>
+          <length>0.025</length>
+        </cylinder>
+      </geometry>
+
+      <surface>
+        <friction>
+          <ode>
+            <mu>1.0</mu>
+            <mu2>1.0</mu2>
+            <fdir1>0 0 1</fdir1>
+          </ode>
+        </friction>
+      </surface>
+    </collision>
+
+    <visual name="visual">
+      <geometry>
+        <cylinder>
+          <radius>0.045</radius>
+          <length>0.025</length>
+        </cylinder>
+      </geometry>
+    </visual>
+  </link>
+
+
+  <link name="front_right_wheel">
+    <pose>0.150 -0.095 -0.075 -1.5707963 0 0</pose>
+
+    <inertial>
+      <mass>0.12</mass>
+      <inertia>
+        <ixx>0.00013</ixx>
+        <iyy>0.00013</iyy>
+        <izz>0.00007</izz>
+      </inertia>
+    </inertial>
+
+    <collision name="collision">
+      <geometry>
+        <cylinder>
+          <radius>0.045</radius>
+          <length>0.025</length>
+        </cylinder>
+      </geometry>
+
+      <surface>
+        <friction>
+          <ode>
+            <mu>1.0</mu>
+            <mu2>1.0</mu2>
+            <fdir1>0 0 1</fdir1>
+          </ode>
+        </friction>
+      </surface>
+    </collision>
+
+    <visual name="visual">
+      <geometry>
+        <cylinder>
+          <radius>0.045</radius>
+          <length>0.025</length>
+        </cylinder>
+      </geometry>
+    </visual>
+  </link>
+
+
+  <link name="rear_left_wheel">
+    <pose>-0.150 0.095 -0.075 -1.5707963 0 0</pose>
+
+    <inertial>
+      <mass>0.12</mass>
+      <inertia>
+        <ixx>0.00013</ixx>
+        <iyy>0.00013</iyy>
+        <izz>0.00007</izz>
+      </inertia>
+    </inertial>
+
+    <collision name="collision">
+      <geometry>
+        <cylinder>
+          <radius>0.045</radius>
+          <length>0.025</length>
+        </cylinder>
+      </geometry>
+
+      <surface>
+        <friction>
+          <ode>
+            <mu>1.0</mu>
+            <mu2>1.0</mu2>
+            <fdir1>0 0 1</fdir1>
+          </ode>
+        </friction>
+      </surface>
+    </collision>
+
+    <visual name="visual">
+      <geometry>
+        <cylinder>
+          <radius>0.045</radius>
+          <length>0.025</length>
+        </cylinder>
+      </geometry>
+    </visual>
+  </link>
+
+
+  <link name="rear_right_wheel">
+    <pose>-0.150 -0.095 -0.075 -1.5707963 0 0</pose>
+
+    <inertial>
+      <mass>0.12</mass>
+      <inertia>
+        <ixx>0.00013</ixx>
+        <iyy>0.00013</iyy>
+        <izz>0.00007</izz>
+      </inertia>
+    </inertial>
+
+    <collision name="collision">
+      <geometry>
+        <cylinder>
+          <radius>0.045</radius>
+          <length>0.025</length>
+        </cylinder>
+      </geometry>
+
+      <surface>
+        <friction>
+          <ode>
+            <mu>1.0</mu>
+            <mu2>1.0</mu2>
+            <fdir1>0 0 1</fdir1>
+          </ode>
+        </friction>
+      </surface>
+    </collision>
+
+    <visual name="visual">
+      <geometry>
+        <cylinder>
+          <radius>0.045</radius>
+          <length>0.025</length>
+        </cylinder>
+      </geometry>
+    </visual>
+  </link>
+
+
+  <!-- =========================
+       FRONT STEERING JOINTS
+       ========================= -->
+
+  <joint name="front_left_steering_joint" type="revolute">
+    <parent>chassis</parent>
+    <child>front_left_steering_link</child>
+
+    <axis>
+      <xyz>0 0 1</xyz>
+
+      <limit>
+        <lower>-0.610865</lower>
+        <upper>0.610865</upper>
+        <velocity>2.0</velocity>
+        <effort>20</effort>
+      </limit>
+    </axis>
+  </joint>
+
+
+  <joint name="front_right_steering_joint" type="revolute">
+    <parent>chassis</parent>
+    <child>front_right_steering_link</child>
+
+    <axis>
+      <xyz>0 0 1</xyz>
+
+      <limit>
+        <lower>-0.610865</lower>
+        <upper>0.610865</upper>
+        <velocity>2.0</velocity>
+        <effort>20</effort>
+      </limit>
+    </axis>
+  </joint>
+
+
+  <!-- =========================
+       WHEEL ROTATION JOINTS
+       ========================= -->
+
+  <joint name="front_left_wheel_joint" type="revolute">
+    <parent>front_left_steering_link</parent>
+    <child>front_left_wheel</child>
+
+    <axis>
+      <xyz>0 0 1</xyz>
+      <limit>
+        <lower>-1.79769e+308</lower>
+        <upper>1.79769e+308</upper>
+      </limit>
+    </axis>
+  </joint>
+
+
+  <joint name="front_right_wheel_joint" type="revolute">
+    <parent>front_right_steering_link</parent>
+    <child>front_right_wheel</child>
+
+    <axis>
+      <xyz>0 0 1</xyz>
+      <limit>
+        <lower>-1.79769e+308</lower>
+        <upper>1.79769e+308</upper>
+      </limit>
+    </axis>
+  </joint>
+
+
+  <joint name="rear_left_wheel_joint" type="revolute">
+    <parent>chassis</parent>
+    <child>rear_left_wheel</child>
+
+    <axis>
+      <xyz>0 0 1</xyz>
+      <limit>
+        <lower>-1.79769e+308</lower>
+        <upper>1.79769e+308</upper>
+      </limit>
+    </axis>
+  </joint>
+
+
+  <joint name="rear_right_wheel_joint" type="revolute">
+    <parent>chassis</parent>
+    <child>rear_right_wheel</child>
+
+    <axis>
+      <xyz>0 0 1</xyz>
+      <limit>
+        <lower>-1.79769e+308</lower>
+        <upper>1.79769e+308</upper>
+      </limit>
+    </axis>
+  </joint>
+
+
+  <!-- =========================
+       ACKERMANN CONTROLLER
+       후륜 구동 / 전륜 조향
+       ========================= -->
+
+  <plugin
+    filename="gz-sim-ackermann-steering-system"
+    name="gz::sim::systems::AckermannSteering">
+
+    <left_joint>rear_left_wheel_joint</left_joint>
+    <right_joint>rear_right_wheel_joint</right_joint>
+
+    <left_steering_joint>
+      front_left_steering_joint
+    </left_steering_joint>
+
+    <right_steering_joint>
+      front_right_steering_joint
+    </right_steering_joint>
+
+    <wheel_base>0.300</wheel_base>
+    <wheel_separation>0.190</wheel_separation>
+    <kingpin_width>0.190</kingpin_width>
+    <wheel_radius>0.045</wheel_radius>
+
+    <!-- 차량 자체 최대 조향각 35도 -->
+    <steering_limit>0.610865</steering_limit>
+
+    <min_velocity>-1.5</min_velocity>
+    <max_velocity>3.0</max_velocity>
+
+    <min_acceleration>-4.0</min_acceleration>
+    <max_acceleration>4.0</max_acceleration>
+
+    <steer_p_gain>10.0</steer_p_gain>
+
+    <odom_publish_frequency>50</odom_publish_frequency>
+
+  </plugin>
+
+</model>
+
+</sdf>
