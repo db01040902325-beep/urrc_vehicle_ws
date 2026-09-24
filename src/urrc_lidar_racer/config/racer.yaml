@@ -1,0 +1,64 @@
+lidar_racer:
+  ros__parameters:
+
+    # 차량
+    wheelbase: 0.330
+    track_width: 1.50
+    max_steer_deg: 28.0
+
+    # 조향 안정화
+    steer_ema_alpha: 0.45
+    max_steer_step_deg: 7.0
+
+    # Adaptive Lookahead
+    lookahead_straight: 2.00
+    lookahead_medium: 1.55
+    lookahead_sharp: 1.15
+    lookahead_medium_threshold_deg: 8.0
+    lookahead_sharp_threshold_deg: 18.0
+
+    # 속도
+    speed_straight: 2.30
+    speed_curve_1: 1.85
+    speed_curve_2: 1.45
+    speed_curve_3: 1.15
+    speed_sharp: 0.90
+
+    speed_threshold_1_deg: 4.0
+    speed_threshold_2_deg: 8.0
+    speed_threshold_3_deg: 15.0
+    speed_threshold_4_deg: 22.0
+
+    # 전방 코너 예측
+    preview_distance: 3.0
+    preview_min_x: 1.20
+    preview_max_x: 4.00
+    preview_max_pair_dx: 0.80
+
+    preview_speed_4deg: 1.85
+    preview_speed_7deg: 1.45
+    preview_speed_12deg: 1.15
+    preview_speed_18deg: 0.95
+
+    # 안전
+    front_stop_distance: 0.50
+    front_slow_distance: 0.90
+    ttc_stop_sec: 0.35
+    ttc_slow_sec: 0.65
+    emergency_slow_speed: 0.60
+
+    # LiDAR 인식
+    lidar_max_use_range: 5.0
+    cluster_gap: 0.12
+    cluster_max_width: 0.22
+
+    detection_min_x: 0.15
+    detection_max_x: 4.0
+    detection_max_abs_y: 1.50
+    side_deadband_y: 0.15
+
+    # Track-loss
+    loss_hold_frames: 2
+    loss_slow_frames: 5
+    loss_hold_speed: 0.50
+    loss_slow_speed: 0.30
