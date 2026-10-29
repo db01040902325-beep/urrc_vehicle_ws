@@ -1,0 +1,111 @@
+name: Headless Monza 5-minute validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/headless-monza-5min.yml'
+  workflow_dispatch:
+
+jobs:
+  simulate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+
+    steps:
+      - name: Checkout vehicle workspace
+        uses: actions/checkout@v4
+
+      - name: Setup ROS 2 Jazzy
+        uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: jazzy
+
+      - name: Install simulation dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ros-jazzy-ros-gz \
+            python3-colcon-common-extensions \
+            python3-opencv \
+            python3-numpy \
+            xvfb \
+            libgl1-mesa-dri \
+            mesa-utils
+
+      - name: Build current Monza map
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/nahee2345/urrc_2.git "$HOME/urrc_2"
+          source /opt/ros/jazzy/setup.bash
+          cd "$HOME/urrc_2"
+          colcon build --symlink-install
+
+      - name: Build vehicle workspace
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ln -s "$GITHUB_WORKSPACE" "$HOME/urrc_vehicle_ws"
+          source /opt/ros/jazzy/setup.bash
+          source "$HOME/urrc_2/install/setup.bash"
+          cd "$GITHUB_WORKSPACE"
+          colcon build --symlink-install
+          python3 -m py_compile \
+            src/urrc_lidar_racer/urrc_lidar_racer/lidar_racer.py \
+            src/urrc_lidar_racer/urrc_lidar_racer/camera_perception.py \
+            src/urrc_lidar_racer/urrc_lidar_racer/overtake_fusion.py \
+            scripts/ci_lap_monitor.py
+
+      - name: Run actual Gazebo simulation
+        id: sim
+        shell: bash
+        continue-on-error: true
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          QT_X11_NO_MITSHM: '1'
+        run: |
+          set +e
+          source /opt/ros/jazzy/setup.bash
+          source "$HOME/urrc_2/install/setup.bash"
+          source "$GITHUB_WORKSPACE/install/setup.bash"
+
+          mkdir -p "$GITHUB_WORKSPACE/ci_logs"
+
+          xvfb-run -a -s "-screen 0 1280x720x24" \
+            ros2 launch urrc_lidar_racer competition.launch.py rviz:=false \
+            > "$GITHUB_WORKSPACE/ci_logs/simulation.log" 2>&1 &
+          SIM_PID=$!
+
+          sleep 25
+
+          python3 "$GITHUB_WORKSPACE/scripts/ci_lap_monitor.py" --timeout 330 \
+            | tee "$GITHUB_WORKSPACE/ci_logs/monitor.log"
+          MONITOR_STATUS=${PIPESTATUS[0]}
+
+          kill -INT "$SIM_PID" 2>/dev/null || true
+          sleep 5
+          kill -TERM "$SIM_PID" 2>/dev/null || true
+          wait "$SIM_PID" 2>/dev/null || true
+
+          echo "monitor_status=$MONITOR_STATUS" >> "$GITHUB_OUTPUT"
+
+          echo "----- simulation tail -----"
+          tail -n 160 "$GITHUB_WORKSPACE/ci_logs/simulation.log" || true
+          echo "----- monitor -----"
+          cat "$GITHUB_WORKSPACE/ci_logs/monitor.log" || true
+
+          exit 0
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: monza-headless-validation
+          path: ci_logs/
+          retention-days: 7
+
+      - name: Require one lap within five minutes
+        shell: bash
+        run: |
+          test "${{ steps.sim.outputs.monitor_status }}" = "0"
