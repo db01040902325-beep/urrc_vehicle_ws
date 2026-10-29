@@ -73,32 +73,32 @@ class LidarRacer(Node):
             'steer_ema_alpha': 0.45,
             'max_steer_step_deg': 7.0,
 
-            'lookahead_straight': 2.00,
-            'lookahead_medium': 1.55,
-            'lookahead_sharp': 1.15,
+            'lookahead_straight': 3.20,
+            'lookahead_medium': 2.40,
+            'lookahead_sharp': 1.70,
             'lookahead_medium_threshold_deg': 8.0,
             'lookahead_sharp_threshold_deg': 18.0,
 
-            'speed_straight': 2.80,
-            'speed_curve_1': 2.20,
-            'speed_curve_2': 1.70,
-            'speed_curve_3': 1.35,
-            'speed_sharp': 1.00,
+            'speed_straight': 6.00,
+            'speed_curve_1': 5.00,
+            'speed_curve_2': 4.20,
+            'speed_curve_3': 3.40,
+            'speed_sharp': 2.60,
 
             'speed_threshold_1_deg': 4.0,
             'speed_threshold_2_deg': 8.0,
             'speed_threshold_3_deg': 15.0,
             'speed_threshold_4_deg': 22.0,
 
-            'preview_distance': 3.0,
-            'preview_min_x': 1.20,
-            'preview_max_x': 4.00,
+            'preview_distance': 4.8,
+            'preview_min_x': 1.50,
+            'preview_max_x': 6.50,
             'preview_max_pair_dx': 0.80,
 
-            'preview_speed_4deg': 2.20,
-            'preview_speed_7deg': 1.70,
-            'preview_speed_12deg': 1.35,
-            'preview_speed_18deg': 1.05,
+            'preview_speed_4deg': 5.00,
+            'preview_speed_7deg': 4.20,
+            'preview_speed_12deg': 3.40,
+            'preview_speed_18deg': 2.70,
 
             'front_stop_distance': 0.50,
             'front_slow_distance': 0.90,
@@ -106,19 +106,19 @@ class LidarRacer(Node):
             'ttc_slow_sec': 0.65,
             'emergency_slow_speed': 0.60,
 
-            'lidar_max_use_range': 5.0,
+            'lidar_max_use_range': 7.0,
             'cluster_gap': 0.12,
             'cluster_max_width': 0.22,
 
             'detection_min_x': 0.15,
-            'detection_max_x': 4.0,
+            'detection_max_x': 6.5,
             'detection_max_abs_y': 1.50,
             'side_deadband_y': 0.15,
 
             'loss_hold_frames': 2,
             'loss_slow_frames': 5,
-            'loss_hold_speed': 0.50,
-            'loss_slow_speed': 0.30,
+            'loss_hold_speed': 1.20,
+            'loss_slow_speed': 0.70,
         }
 
         for name, value in defaults.items():
@@ -173,10 +173,10 @@ class LidarRacer(Node):
 
             # 주요 안전 조건
             if param.name == 'speed_straight':
-                if value <= 0.0 or value > 4.0:
+                if value <= 0.0 or value > 7.0:
                     return SetParametersResult(
                         successful=False,
-                        reason='speed_straight must be 0~4 m/s'
+                        reason='speed_straight must be 0~7 m/s'
                     )
 
             if param.name == 'max_steer_deg':
@@ -222,16 +222,16 @@ class LidarRacer(Node):
 
         for x, y, size in clusters:
 
-            if x < 0.15 or x > 4.0:
+            if x < self.detection_min_x or x > self.detection_max_x:
                 continue
 
-            if abs(y) > 1.50:
+            if abs(y) > self.detection_max_abs_y:
                 continue
 
-            if y > 0.15:
+            if y > self.side_deadband_y:
                 left.append((x, y))
 
-            elif y < -0.15:
+            elif y < -self.side_deadband_y:
                 right.append((x, y))
 
         # ==========================================
@@ -877,7 +877,7 @@ class LidarRacer(Node):
         right
     ):
         # 약 3m 앞의 트랙 중앙점을 찾음
-        preview_distance = 3.0
+        preview_distance = self.preview_distance
         candidates = []
 
         # 좌우 라바콘 쌍
@@ -897,7 +897,7 @@ class LidarRacer(Node):
                 cx = (lx + rx) * 0.5
                 cy = (ly + ry) * 0.5
 
-                if 1.20 <= cx <= 4.00:
+                if self.preview_min_x <= cx <= self.preview_max_x:
                     candidates.append(
                         (cx, cy)
                     )
@@ -912,7 +912,7 @@ class LidarRacer(Node):
         # 왼쪽 경계만 보이는 경우
         far_left = [
             p for p in left
-            if 1.20 <= p[0] <= 4.00
+            if self.preview_min_x <= p[0] <= self.preview_max_x
         ]
 
         if far_left:
@@ -930,7 +930,7 @@ class LidarRacer(Node):
         # 오른쪽 경계만 보이는 경우
         far_right = [
             p for p in right
-            if 1.20 <= p[0] <= 4.00
+            if self.preview_min_x <= p[0] <= self.preview_max_x
         ]
 
         if far_right:
