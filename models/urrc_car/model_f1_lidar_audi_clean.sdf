@@ -172,7 +172,7 @@
         <limit>
           <lower>-0.610865</lower>
           <upper>0.610865</upper>
-          <velocity>2.0</velocity>
+          <velocity>3.5</velocity>
           <effort>20</effort>
         </limit>
       </axis>
@@ -185,7 +185,7 @@
         <limit>
           <lower>-0.610865</lower>
           <upper>0.610865</upper>
-          <velocity>2.0</velocity>
+          <velocity>3.5</velocity>
           <effort>20</effort>
         </limit>
       </axis>
@@ -258,7 +258,7 @@
       </visual>
       <sensor name="race_lidar" type="gpu_lidar">
         <topic>/scan</topic>
-        <update_rate>20</update_rate>
+        <update_rate>30</update_rate>
         <always_on>true</always_on>
         <visualize>true</visualize>
         <lidar>
@@ -328,10 +328,10 @@
       <wheel_radius>0.045</wheel_radius>
       <steering_limit>0.610865</steering_limit>
       <min_velocity>-1.5</min_velocity>
-      <max_velocity>3.0</max_velocity>
-      <min_acceleration>-4.0</min_acceleration>
-      <max_acceleration>4.0</max_acceleration>
-      <steer_p_gain>10.0</steer_p_gain>
+      <max_velocity>6.5</max_velocity>
+      <min_acceleration>-8.0</min_acceleration>
+      <max_acceleration>8.0</max_acceleration>
+      <steer_p_gain>14.0</steer_p_gain>
       <odom_publish_frequency>50</odom_publish_frequency>
     </plugin>
   </model>
