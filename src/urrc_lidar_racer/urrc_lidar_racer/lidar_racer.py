@@ -79,11 +79,11 @@ class LidarRacer(Node):
             'lookahead_medium_threshold_deg': 8.0,
             'lookahead_sharp_threshold_deg': 18.0,
 
-            'speed_straight': 2.30,
-            'speed_curve_1': 1.85,
-            'speed_curve_2': 1.45,
-            'speed_curve_3': 1.15,
-            'speed_sharp': 0.90,
+            'speed_straight': 2.80,
+            'speed_curve_1': 2.20,
+            'speed_curve_2': 1.70,
+            'speed_curve_3': 1.35,
+            'speed_sharp': 1.00,
 
             'speed_threshold_1_deg': 4.0,
             'speed_threshold_2_deg': 8.0,
@@ -95,10 +95,10 @@ class LidarRacer(Node):
             'preview_max_x': 4.00,
             'preview_max_pair_dx': 0.80,
 
-            'preview_speed_4deg': 1.85,
-            'preview_speed_7deg': 1.45,
-            'preview_speed_12deg': 1.15,
-            'preview_speed_18deg': 0.95,
+            'preview_speed_4deg': 2.20,
+            'preview_speed_7deg': 1.70,
+            'preview_speed_12deg': 1.35,
+            'preview_speed_18deg': 1.05,
 
             'front_stop_distance': 0.50,
             'front_slow_distance': 0.90,
