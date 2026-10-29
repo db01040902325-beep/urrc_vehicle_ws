@@ -78,6 +78,12 @@ jobs:
 
           sleep 25
 
+          # Diagnostic pass: bypass only the camera start gate so that
+          # track-following performance can be measured independently.
+          ros2 param set /camera_perception start_gate_enable false || true
+          ros2 param set /overtake_fusion start_gate_enable false || true
+          sleep 3
+
           python3 "$GITHUB_WORKSPACE/scripts/ci_lap_monitor.py" --timeout 330 \
             | tee "$GITHUB_WORKSPACE/ci_logs/monitor.log"
           MONITOR_STATUS=${PIPESTATUS[0]}
