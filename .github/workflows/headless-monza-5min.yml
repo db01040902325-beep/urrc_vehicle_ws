@@ -3,8 +3,6 @@ name: Headless Monza 5-minute validation
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/headless-monza-5min.yml'
   workflow_dispatch:
 
 jobs:
