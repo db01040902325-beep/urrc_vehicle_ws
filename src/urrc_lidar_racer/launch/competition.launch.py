@@ -1,4 +1,5 @@
 import os
+import sys
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -12,7 +13,9 @@ from launch.actions import (
     TimerAction,
 )
 from launch.event_handlers import OnProcessExit
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.launch_description_sources import (
+    PythonLaunchDescriptionSource,
+)
 from launch.substitutions import (
     EnvironmentVariable,
     LaunchConfiguration,
@@ -23,13 +26,6 @@ def generate_launch_description():
 
     rviz = LaunchConfiguration('rviz')
     home = os.path.expanduser('~')
-
-    world_file = os.path.join(
-        home,
-        'urrc_vehicle_ws',
-        'worlds',
-        'monza_lidar.sdf'
-    )
 
     vehicle_file = os.path.join(
         home,
@@ -47,7 +43,28 @@ def generate_launch_description():
         'urrc_track_gazebo'
     )
 
-    track_resource_root = os.path.dirname(track_share)
+    run_world = os.path.join(
+        track_share,
+        'scripts',
+        'run_world.py'
+    )
+
+    traffic_lights = os.path.join(
+        track_share,
+        'scripts',
+        'traffic_lights_v10.py'
+    )
+
+    gui_config = os.path.join(
+        track_share,
+        'worlds',
+        'monza_grid.gui.config'
+    )
+
+    track_models_root = os.path.join(
+        track_share,
+        'models'
+    )
 
     vehicle_model_root = os.path.join(
         home,
@@ -58,50 +75,48 @@ def generate_launch_description():
     race_launch = os.path.join(
         racer_share,
         'launch',
-        'race.launch.py'
+        'race_camera_overtake.launch.py'
     )
 
-    # ==========================================
-    # 1. Gazebo SERVER ONLY
-    # ==========================================
+    partition = f'urrc_practice_{os.getuid()}'
+
+    # Latest urrc_2 Monza server, with the start-light gantry.
+    # Auto lights are delayed until the vehicle/camera have spawned.
     gazebo_server = ExecuteProcess(
         cmd=[
-            'gz',
-            'sim',
-            '-s',
-            '-r',
-            '-v',
-            '3',
-            world_file
+            sys.executable,
+            run_world,
+            'monza',
+            '--server',
+            '--view',
+            'grid',
+            '--no-auto-start',
         ],
         output='screen'
     )
 
-    # ==========================================
-    # 2. World create 서비스 확인 후 차량 Spawn
-    # ==========================================
     spawn_command = f"""
 set -e
 
 echo "[URRC] Waiting for /world/monza/create ..."
 
-for i in $(seq 1 120); do
+for i in $(seq 1 160); do
 
     if gz service -l | grep -Fxq "/world/monza/create"; then
 
         echo "[URRC] Gazebo server READY"
-        echo "[URRC] Spawning urrc_car ..."
+        echo "[URRC] Spawning LiDAR + camera vehicle at grid 1 ..."
 
         exec ros2 launch ros_gz_sim gz_spawn_model.launch.py \
             world:=monza \
             file:={vehicle_file} \
             entity_name:=urrc_car \
-            x:=39.59260 \
-            y:=-27.38488 \
-            z:=0.120 \
+            x:=0.3786723464 \
+            y:=-2.0560353977 \
+            z:=1.2435265615 \
             R:=0.0 \
             P:=0.0 \
-            Y:=1.5707963
+            Y:=1.4573844161
     fi
 
     sleep 0.25
@@ -120,23 +135,19 @@ exit 1
         output='screen'
     )
 
-    # ==========================================
-    # 3. 차량이 존재한 다음 GUI 실행
-    # ==========================================
     gazebo_gui = ExecuteProcess(
         cmd=[
             'gz',
             'sim',
             '-g',
             '-v',
-            '3'
+            '3',
+            '--gui-config',
+            gui_config,
         ],
         output='screen'
     )
 
-    # ==========================================
-    # 4. 자율주행 시스템
-    # ==========================================
     race = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             race_launch
@@ -144,6 +155,17 @@ exit 1
         launch_arguments={
             'rviz': rviz
         }.items()
+    )
+
+    start_lights = ExecuteProcess(
+        cmd=[
+            sys.executable,
+            traffic_lights,
+            '--track',
+            'monza',
+            '--skip-camera-check',
+        ],
+        output='screen'
     )
 
     return LaunchDescription([
@@ -154,9 +176,14 @@ exit 1
         ),
 
         SetEnvironmentVariable(
+            'GZ_PARTITION',
+            partition
+        ),
+
+        SetEnvironmentVariable(
             'GZ_SIM_RESOURCE_PATH',
             [
-                track_resource_root,
+                track_models_root,
                 ':',
                 track_share,
                 ':',
@@ -169,24 +196,26 @@ exit 1
             ]
         ),
 
-        # 서버부터 시작
         gazebo_server,
-
-        # 서버 준비 후 차량 Spawn
         spawn_vehicle,
 
-        # 차량 Spawn 완료 후
-        # GUI를 열고, 2초 뒤 자율주행 시작
         RegisterEventHandler(
             OnProcessExit(
                 target_action=spawn_vehicle,
                 on_exit=[
                     gazebo_gui,
 
+                    # Camera bridge and fusion start first.
                     TimerAction(
-                        period=2.0,
+                        period=1.0,
                         actions=[race]
-                    )
+                    ),
+
+                    # Then run 5-red sequence.
+                    TimerAction(
+                        period=3.0,
+                        actions=[start_lights]
+                    ),
                 ]
             )
         ),
