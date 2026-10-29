@@ -35,7 +35,7 @@ jobs:
       - name: Build current Monza map
         shell: bash
         run: |
-          set -euxo pipefail
+          set -exo pipefail
           git clone --depth 1 https://github.com/nahee2345/urrc_2.git "$HOME/urrc_2"
           source /opt/ros/jazzy/setup.bash
           cd "$HOME/urrc_2"
@@ -44,7 +44,7 @@ jobs:
       - name: Build vehicle workspace
         shell: bash
         run: |
-          set -euxo pipefail
+          set -exo pipefail
           ln -s "$GITHUB_WORKSPACE" "$HOME/urrc_vehicle_ws"
           source /opt/ros/jazzy/setup.bash
           source "$HOME/urrc_2/install/setup.bash"
