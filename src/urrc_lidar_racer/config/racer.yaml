@@ -11,18 +11,18 @@ lidar_racer:
     max_steer_step_deg: 7.0
 
     # Adaptive Lookahead
-    lookahead_straight: 2.00
-    lookahead_medium: 1.55
-    lookahead_sharp: 1.15
+    lookahead_straight: 3.20
+    lookahead_medium: 2.40
+    lookahead_sharp: 1.70
     lookahead_medium_threshold_deg: 8.0
     lookahead_sharp_threshold_deg: 18.0
 
     # 속도
-    speed_straight: 2.80
-    speed_curve_1: 2.20
-    speed_curve_2: 1.70
-    speed_curve_3: 1.35
-    speed_sharp: 1.00
+    speed_straight: 6.00
+    speed_curve_1: 5.00
+    speed_curve_2: 4.20
+    speed_curve_3: 3.40
+    speed_sharp: 2.60
 
     speed_threshold_1_deg: 4.0
     speed_threshold_2_deg: 8.0
@@ -30,15 +30,15 @@ lidar_racer:
     speed_threshold_4_deg: 22.0
 
     # 전방 코너 예측
-    preview_distance: 3.0
-    preview_min_x: 1.20
-    preview_max_x: 4.00
+    preview_distance: 4.8
+    preview_min_x: 1.50
+    preview_max_x: 6.50
     preview_max_pair_dx: 0.80
 
-    preview_speed_4deg: 2.20
-    preview_speed_7deg: 1.70
-    preview_speed_12deg: 1.35
-    preview_speed_18deg: 1.05
+    preview_speed_4deg: 5.00
+    preview_speed_7deg: 4.20
+    preview_speed_12deg: 3.40
+    preview_speed_18deg: 2.70
 
     # 안전
     front_stop_distance: 0.50
@@ -48,17 +48,17 @@ lidar_racer:
     emergency_slow_speed: 0.60
 
     # LiDAR 인식
-    lidar_max_use_range: 5.0
+    lidar_max_use_range: 7.0
     cluster_gap: 0.12
     cluster_max_width: 0.22
 
     detection_min_x: 0.15
-    detection_max_x: 4.0
+    detection_max_x: 6.5
     detection_max_abs_y: 1.50
     side_deadband_y: 0.15
 
     # Track-loss
     loss_hold_frames: 2
     loss_slow_frames: 5
-    loss_hold_speed: 0.50
-    loss_slow_speed: 0.30
+    loss_hold_speed: 1.20
+    loss_slow_speed: 0.70
