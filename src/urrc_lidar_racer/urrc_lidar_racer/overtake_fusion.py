@@ -32,24 +32,25 @@ class OvertakeFusion(Node):
             'camera_gain_deg': 5.5,
             'camera_min_confidence': 0.35,
             'max_steer_deg': 28.0,
+            'max_speed_mps': 6.30,
             'raw_cmd_timeout_sec': 0.35,
-            'emergency_stop_m': 0.45,
-            'overtake_trigger_m': 1.35,
-            'overtake_front_clear_m': 1.80,
+            'emergency_stop_m': 0.55,
+            'overtake_trigger_m': 2.20,
+            'overtake_front_clear_m': 3.00,
             'overtake_side_clear_m': 0.82,
             'overtake_abort_side_m': 0.55,
             'overtake_max_base_steer_deg': 8.0,
-            'overtake_detect_hold_sec': 0.35,
-            'shift_out_sec': 0.70,
-            'pass_min_sec': 0.55,
-            'pass_max_sec': 2.20,
-            'return_sec': 0.85,
+            'overtake_detect_hold_sec': 0.25,
+            'shift_out_sec': 0.85,
+            'pass_min_sec': 0.45,
+            'pass_max_sec': 2.00,
+            'return_sec': 0.95,
             'pass_lane_target': 0.30,
             'fallback_shift_bias_deg': 3.5,
             'fallback_return_bias_deg': 3.0,
-            'shift_speed_mps': 2.35,
-            'overtake_speed_mps': 2.90,
-            'return_speed_mps': 2.35,
+            'shift_speed_mps': 4.50,
+            'overtake_speed_mps': 6.20,
+            'return_speed_mps': 4.50,
             'start_gate_enable': True,
         }
 
@@ -600,7 +601,8 @@ class OvertakeFusion(Node):
             self.max_steer_rad(),
         ))
         speed = float(np.clip(
-            speed, 0.0, 3.0
+            speed, 0.0,
+            float(self.get_parameter('max_speed_mps').value)
         ))
 
         command = Twist()
