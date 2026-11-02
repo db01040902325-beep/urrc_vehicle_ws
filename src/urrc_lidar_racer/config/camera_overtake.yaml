@@ -35,7 +35,7 @@ overtake_fusion:
     imu_spin_yaw_rate_rad_s: 6.0
     imu_min_speed_factor: 0.35
     imu_steer_damping: 0.70
-    camera_gain_deg: 5.5
+    camera_gain_deg: 24.0
     camera_min_confidence: 0.35
     camera_fallback_enable: true
 
@@ -44,20 +44,20 @@ overtake_fusion:
     fusion_lidar_min_confidence: 0.25
     fusion_camera_min_weight: 0.20
     sensor_degraded_confidence: 0.20
-    sensor_degraded_speed_mps: 4.0
+    sensor_degraded_speed_mps: 6.0
 
     # 센서 상태 감시 / Fail-safe
     camera_timeout_sec: 0.50
     boundary_timeout_sec: 0.35
     rear_scan_timeout_sec: 0.35
-    camera_fail_speed_mps: 12.0
-    rear_lidar_fail_speed_mps: 10.0
-    multi_sensor_fail_speed_mps: 4.0
+    camera_fail_speed_mps: 18.0
+    rear_lidar_fail_speed_mps: 15.0
+    multi_sensor_fail_speed_mps: 6.0
 
-    camera_fallback_speed_mps: 3.00
-    camera_fallback_gain_scale: 1.35
-    max_steer_deg: 28.0
-    max_speed_mps: 15.00
+    camera_fallback_speed_mps: 4.50
+    camera_fallback_gain_scale: 1.45
+    max_steer_deg: 35.0
+    max_speed_mps: 22.50
     raw_cmd_timeout_sec: 0.35
     scan_timeout_sec: 0.25
     emergency_stop_m: 1.00
@@ -69,9 +69,9 @@ overtake_fusion:
     reaction_time_sec: 0.25
     brake_decel_mps2: 10.0
     safety_margin_m: 0.50
-    overtake_trigger_m: 17.50
+    overtake_trigger_m: 26.25
     overtake_trigger_margin_m: 2.00
-    overtake_front_clear_m: 12.00
+    overtake_front_clear_m: 18.00
 
     # 상대속도 + TTC 기반 능동 추월 / 추종
     relative_speed_filter_alpha: 0.35
@@ -103,10 +103,10 @@ overtake_fusion:
     defense_lane_target: 0.12
     defense_max_sec: 1.00
     defense_cooldown_sec: 2.00
-    defense_speed_mps: 12.0
+    defense_speed_mps: 18.0
     defense_front_clear_m: 8.0
     defense_side_clear_m: 1.00
-    defense_max_base_steer_deg: 5.0
+    defense_max_base_steer_deg: 7.5
     defense_side_margin_m: 0.30
 
     # 앞차 판별: 긴 벽/가드레일 대신 차량 크기 클러스터만 추월 대상으로 사용
@@ -124,8 +124,8 @@ overtake_fusion:
     # 최종 명령 평활화
     final_accel_limit_mps2: 10.0
     final_decel_limit_mps2: 10.0
-    final_steer_rate_deg_s: 85.0
-    overtake_max_base_steer_deg: 8.0
+    final_steer_rate_deg_s: 130.0
+    overtake_max_base_steer_deg: 10.0
     overtake_detect_hold_sec: 0.25
     shift_out_sec: 0.85
     pass_min_sec: 0.45
@@ -133,7 +133,7 @@ overtake_fusion:
     pass_lane_target: 0.30
     fallback_shift_bias_deg: 3.5
     fallback_return_bias_deg: 3.0
-    shift_speed_mps: 10.00
-    overtake_speed_mps: 15.00
-    return_speed_mps: 10.00
+    shift_speed_mps: 15.00
+    overtake_speed_mps: 22.50
+    return_speed_mps: 15.00
     start_gate_enable: true
