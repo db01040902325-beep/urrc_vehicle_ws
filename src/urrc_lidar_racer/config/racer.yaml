@@ -58,6 +58,22 @@ lidar_racer:
     curve_speed_hard: 6.0
     curve_min_confidence: 0.25
 
+    # 급코너/헤어핀: 전방을 가로막는 넓은 벽 + 열린 측면으로 방향 판단
+    hairpin_enable: true
+    hairpin_front_sector_deg: 14.0
+    hairpin_front_trigger_m: 10.0
+    hairpin_front_release_m: 12.0
+    hairpin_front_hit_ratio: 0.35
+    hairpin_side_inner_deg: 20.0
+    hairpin_side_outer_deg: 72.0
+    hairpin_open_margin_m: 0.50
+    hairpin_min_open_m: 2.00
+    hairpin_steer_min_deg: 10.0
+    hairpin_steer_max_deg: 26.0
+    hairpin_speed_mps: 3.5
+    hairpin_confirm_frames: 2
+    hairpin_release_frames: 4
+
     # 안전
     front_stop_distance: 1.00
     front_slow_distance: 4.00
