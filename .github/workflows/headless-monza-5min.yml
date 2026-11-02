@@ -39,6 +39,9 @@ jobs:
           git clone --depth 1 https://github.com/nahee2345/urrc_2.git "$HOME/urrc_2"
           source /opt/ros/jazzy/setup.bash
           cd "$HOME/urrc_2"
+          # Current urrc_2 CMake installs docs/, but the repository may not
+          # contain that directory. Create it only inside the CI checkout.
+          mkdir -p src/urrc_track_gazebo/docs
           colcon build --symlink-install
 
       - name: Build vehicle workspace
