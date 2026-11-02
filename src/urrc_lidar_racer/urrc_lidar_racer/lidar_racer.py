@@ -102,7 +102,7 @@ class LidarRacer(Node):
         defaults = {
             'wheelbase': 0.330,
             'track_width': 1.50,
-            'max_steer_deg': 35.0,
+            'max_steer_deg': 30.0,
 
             'steer_ema_alpha': 0.45,
             'max_steer_step_deg': 5.0,
