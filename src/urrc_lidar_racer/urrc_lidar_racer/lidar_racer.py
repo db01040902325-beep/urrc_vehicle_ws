@@ -54,6 +54,18 @@ class LidarRacer(Node):
             10
         )
 
+        self.curve_prediction_pub = self.create_publisher(
+            Float32,
+            '/race/curve_prediction_deg',
+            10
+        )
+
+        self.curve_speed_pub = self.create_publisher(
+            Float32,
+            '/race/curve_speed_limit_mps',
+            10
+        )
+
         self.lateral_speed_pub = self.create_publisher(
             Float32,
             '/race/lateral_speed_limit_mps',
@@ -115,6 +127,19 @@ class LidarRacer(Node):
             'preview_speed_7deg': 8.00,
             'preview_speed_12deg': 6.00,
             'preview_speed_18deg': 4.50,
+
+            # Long-range curve prediction for 15 m/s operation.
+            'curve_prediction_enable': True,
+            'curve_near_distance': 6.0,
+            'curve_mid_distance': 12.0,
+            'curve_far_distance': 18.0,
+            'curve_soft_deg': 4.0,
+            'curve_medium_deg': 8.0,
+            'curve_hard_deg': 14.0,
+            'curve_speed_soft': 10.0,
+            'curve_speed_medium': 8.0,
+            'curve_speed_hard': 6.0,
+            'curve_min_confidence': 0.25,
 
             'front_stop_distance': 1.00,
             'front_slow_distance': 4.00,
@@ -330,6 +355,22 @@ class LidarRacer(Node):
         preview_msg.data = float(preview_angle_deg)
         self.preview_pub.publish(preview_msg)
 
+        (
+            curve_prediction_deg,
+            curve_speed_limit,
+        ) = self.predict_long_curve(
+            left,
+            right,
+            boundary_confidence,
+        )
+
+        self.curve_prediction_pub.publish(
+            Float32(data=float(curve_prediction_deg))
+        )
+        self.curve_speed_pub.publish(
+            Float32(data=float(curve_speed_limit))
+        )
+
         # RViz 표시
         self.publish_markers(
             left,
@@ -450,6 +491,14 @@ class LidarRacer(Node):
 
         elif preview_abs > 4.0:
             speed = min(speed, self.preview_speed_4deg)
+
+        # Long-range predicted curvature braking.
+        # This acts before the vehicle reaches the actual steering point.
+        if bool(self.curve_prediction_enable):
+            speed = min(
+                speed,
+                float(curve_speed_limit),
+            )
 
         # ==========================================
         # High-speed stability
@@ -805,6 +854,90 @@ class LidarRacer(Node):
         self.marker_pub.publish(
             msg
         )
+
+    # =====================================================
+    # Long-range curve prediction
+    # =====================================================
+
+    @staticmethod
+    def normalize_angle(angle):
+        while angle > math.pi:
+            angle -= 2.0 * math.pi
+        while angle < -math.pi:
+            angle += 2.0 * math.pi
+        return angle
+
+    def predict_long_curve(
+        self,
+        left,
+        right,
+        boundary_confidence,
+    ):
+        if not bool(self.curve_prediction_enable):
+            return 0.0, float(self.speed_straight)
+
+        if boundary_confidence < float(self.curve_min_confidence):
+            return 0.0, float(self.speed_straight)
+
+        distances = [
+            float(self.curve_near_distance),
+            float(self.curve_mid_distance),
+            float(self.curve_far_distance),
+        ]
+
+        points = []
+        for distance in distances:
+            point = self.center_from_boundaries(
+                left,
+                right,
+                distance,
+            )
+            if point is not None:
+                points.append(point)
+
+        if len(points) < 2:
+            return 0.0, float(self.speed_straight)
+
+        headings = []
+        previous = (0.0, 0.0)
+
+        for point in points:
+            dx = point[0] - previous[0]
+            dy = point[1] - previous[1]
+            if math.hypot(dx, dy) < 0.20:
+                continue
+            headings.append(math.atan2(dy, dx))
+            previous = point
+
+        if not headings:
+            return 0.0, float(self.speed_straight)
+
+        candidates = [headings[-1]]
+
+        for index in range(1, len(headings)):
+            candidates.append(
+                self.normalize_angle(
+                    headings[index] - headings[index - 1]
+                )
+            )
+
+        dominant = max(
+            candidates,
+            key=lambda value: abs(value),
+        )
+        prediction_deg = math.degrees(dominant)
+        abs_prediction = abs(prediction_deg)
+
+        if abs_prediction >= float(self.curve_hard_deg):
+            speed_limit = float(self.curve_speed_hard)
+        elif abs_prediction >= float(self.curve_medium_deg):
+            speed_limit = float(self.curve_speed_medium)
+        elif abs_prediction >= float(self.curve_soft_deg):
+            speed_limit = float(self.curve_speed_soft)
+        else:
+            speed_limit = float(self.speed_straight)
+
+        return prediction_deg, speed_limit
 
     # =====================================================
     # Continuous wall / guardrail tracking
