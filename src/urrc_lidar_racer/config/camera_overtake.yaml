@@ -69,15 +69,17 @@ overtake_fusion:
     center_wall_min_m: 0.25
     center_wall_max_m: 4.50
     center_error_scale_m: 0.80
-    center_wall_gain_deg: 18.0
-    center_camera_gain_deg: 6.0
+    center_wall_gain_deg: 10.0
+    center_camera_gain_deg: 4.0
     center_align_engage_error_m: 0.18
     center_align_release_error_m: 0.08
-    center_align_speed_mps: 4.0
+    center_align_speed_mps: 3.5
     center_near_wall_m: 0.55
-    center_near_wall_speed_mps: 2.0
-    center_near_wall_steer_deg: 24.0
-    center_steer_ema_alpha: 0.22
+    center_near_wall_speed_mps: 1.8
+    center_near_wall_steer_deg: 16.0
+    center_steer_ema_alpha: 0.14
+    center_max_correction_deg: 10.0
+    center_correction_rate_deg_s: 12.0
 
     max_steer_deg: 35.0
     max_speed_mps: 15.00
@@ -147,7 +149,7 @@ overtake_fusion:
     # 최종 명령 평활화
     final_accel_limit_mps2: 10.0
     final_decel_limit_mps2: 10.0
-    final_steer_rate_deg_s: 75.0
+    final_steer_rate_deg_s: 45.0
     overtake_max_base_steer_deg: 10.0
     overtake_detect_hold_sec: 0.25
     shift_out_sec: 0.85
