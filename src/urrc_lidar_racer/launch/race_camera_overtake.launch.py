@@ -184,12 +184,6 @@ def generate_launch_description():
             executable='lidar_racer',
             name='lidar_racer',
             parameters=[racer_config],
-            remappings=[
-                (
-                    '/model/urrc_car/cmd_vel',
-                    '/race/lidar_cmd_vel'
-                )
-            ],
             output='screen'
         ),
 
