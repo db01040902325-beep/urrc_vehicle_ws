@@ -63,19 +63,22 @@ overtake_fusion:
 
     # 벽 위험구역 회피: 평상시 보정 0°, 위험구역에서만 회피
     center_align_enable: true
-    center_wall_angle_min_deg: 40.0
+    center_wall_angle_min_deg: 75.0
     center_wall_angle_max_deg: 88.0
-    center_wall_percentile: 35.0
+    center_wall_percentile: 55.0
     center_wall_min_m: 0.20
     center_wall_max_m: 4.50
-    wall_danger_enter_m: 0.55
-    wall_danger_release_m: 0.75
-    wall_danger_min_steer_deg: 3.0
-    wall_danger_max_steer_deg: 10.0
-    wall_danger_speed_mps: 3.0
-    wall_danger_critical_m: 0.35
-    wall_danger_critical_speed_mps: 1.5
-    wall_danger_rate_deg_s: 10.0
+    wall_danger_enter_m: 0.50
+    wall_danger_release_m: 0.68
+    wall_danger_min_steer_deg: 2.0
+    wall_danger_max_steer_deg: 7.0
+    wall_danger_speed_mps: 2.5
+    wall_danger_critical_m: 0.30
+    wall_danger_critical_speed_mps: 1.2
+    wall_danger_rate_deg_s: 6.0
+    wall_danger_confirm_frames: 8
+    wall_danger_width_min_m: 0.90
+    wall_danger_width_max_m: 3.50
 
     max_steer_deg: 30.0
     straight_steer_deadband_deg: 2.5
@@ -145,10 +148,10 @@ overtake_fusion:
 
     # 최종 명령 평활화
     final_accel_limit_mps2: 10.0
-    final_decel_limit_mps2: 6.0
+    final_decel_limit_mps2: 4.0
     final_steer_rate_deg_s: 45.0
-    stop_hold_sec: 0.35
-    stop_speed_deadband_mps: 0.12
+    stop_hold_sec: 1.00
+    stop_speed_deadband_mps: 0.20
     overtake_max_base_steer_deg: 10.0
     overtake_detect_hold_sec: 0.25
     shift_out_sec: 0.85
