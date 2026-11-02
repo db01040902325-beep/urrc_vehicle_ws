@@ -68,26 +68,22 @@ class OvertakeFusion(Node):
             'camera_fallback_speed_mps': 3.00,
             'camera_fallback_gain_scale': 1.45,
 
-            # LiDAR + camera lane-centering. Keep the car midway between
-            # both guardrails before allowing full race speed.
+            # Wall danger-zone avoidance only.
+            # Outside the danger zone this layer adds zero steering.
             'center_align_enable': True,
             'center_wall_angle_min_deg': 40.0,
             'center_wall_angle_max_deg': 88.0,
             'center_wall_percentile': 35.0,
-            'center_wall_min_m': 0.25,
+            'center_wall_min_m': 0.20,
             'center_wall_max_m': 4.50,
-            'center_error_scale_m': 0.80,
-            'center_wall_gain_deg': 10.0,
-            'center_camera_gain_deg': 4.0,
-            'center_align_engage_error_m': 0.18,
-            'center_align_release_error_m': 0.08,
-            'center_align_speed_mps': 3.5,
-            'center_near_wall_m': 0.55,
-            'center_near_wall_speed_mps': 1.8,
-            'center_near_wall_steer_deg': 16.0,
-            'center_steer_ema_alpha': 0.14,
-            'center_max_correction_deg': 10.0,
-            'center_correction_rate_deg_s': 12.0,
+            'wall_danger_enter_m': 0.55,
+            'wall_danger_release_m': 0.75,
+            'wall_danger_min_steer_deg': 3.0,
+            'wall_danger_max_steer_deg': 10.0,
+            'wall_danger_speed_mps': 3.0,
+            'wall_danger_critical_m': 0.35,
+            'wall_danger_critical_speed_mps': 1.5,
+            'wall_danger_rate_deg_s': 10.0,
 
             'max_steer_deg': 30.0,
             'max_speed_mps': 15.00,
@@ -159,6 +155,8 @@ class OvertakeFusion(Node):
             'final_accel_limit_mps2': 10.0,
             'final_decel_limit_mps2': 10.0,
             'final_steer_rate_deg_s': 45.0,
+            'stop_hold_sec': 0.35,
+            'stop_speed_deadband_mps': 0.12,
 
             'overtake_max_base_steer_deg': 10.0,
             'overtake_detect_hold_sec': 0.25,
@@ -224,6 +222,8 @@ class OvertakeFusion(Node):
         self.center_error_m = 0.0
         self.center_filtered_correction = 0.0
         self.center_last_update_time = self.now_sec()
+        self.wall_danger_side = 0
+        self.stop_hold_until = 0.0
 
         self.output_speed = 0.0
         self.output_steer = 0.0
@@ -543,7 +543,11 @@ class OvertakeFusion(Node):
         return left_distance, right_distance, center_error
 
     def center_alignment(self):
-        """Return steering correction and speed cap from LiDAR + camera."""
+        """Wall danger-zone avoidance.
+
+        This no longer tries to center the vehicle. When both walls are
+        outside the danger zone, this layer contributes exactly zero steering.
+        """
         if not bool(
             self.get_parameter('center_align_enable').value
         ):
@@ -552,8 +556,9 @@ class OvertakeFusion(Node):
         measurement = self.wall_center_measurement()
         if measurement is None:
             self.center_align_active = False
+            self.wall_danger_side = 0
             self.center_error_m = 0.0
-            self.center_filtered_correction *= 0.85
+            self.center_filtered_correction = 0.0
             self.center_error_pub.publish(Float32(data=0.0))
             self.left_wall_pub.publish(Float32(data=-1.0))
             self.right_wall_pub.publish(Float32(data=-1.0))
@@ -573,95 +578,76 @@ class OvertakeFusion(Node):
             Float32(data=float(right_distance))
         )
 
-        engage = float(
-            self.get_parameter(
-                'center_align_engage_error_m'
-            ).value
+        enter = float(
+            self.get_parameter('wall_danger_enter_m').value
         )
         release = float(
-            self.get_parameter(
-                'center_align_release_error_m'
-            ).value
+            self.get_parameter('wall_danger_release_m').value
         )
 
+        # Hysteresis: once avoidance starts, keep avoiding the same wall
+        # until that wall is safely outside the release distance.
         if self.center_align_active:
-            if abs(center_error) <= release:
+            tracked = (
+                left_distance
+                if self.wall_danger_side < 0
+                else right_distance
+            )
+            if tracked >= release:
                 self.center_align_active = False
-        elif abs(center_error) >= engage:
-            self.center_align_active = True
+                self.wall_danger_side = 0
+        else:
+            if left_distance < enter or right_distance < enter:
+                if left_distance <= right_distance:
+                    # Left wall danger -> steer right (negative).
+                    self.wall_danger_side = -1
+                else:
+                    # Right wall danger -> steer left (positive).
+                    self.wall_danger_side = 1
+                self.center_align_active = True
 
-        error_scale = max(
-            0.05,
-            float(
-                self.get_parameter(
-                    'center_error_scale_m'
-                ).value
-            ),
+        if not self.center_align_active:
+            self.center_filtered_correction = 0.0
+            self.center_active_pub.publish(Bool(data=False))
+            return 0.0, float('inf'), False
+
+        danger_distance = (
+            left_distance
+            if self.wall_danger_side < 0
+            else right_distance
         )
-        normalized = float(np.clip(
-            center_error / error_scale,
-            -1.0,
+
+        minimum = float(
+            self.get_parameter('center_wall_min_m').value
+        )
+        severity = float(np.clip(
+            (enter - danger_distance)
+            / max(enter - minimum, 0.05),
+            0.0,
             1.0,
         ))
 
-        wall_gain = math.radians(
+        min_steer = math.radians(
             float(
                 self.get_parameter(
-                    'center_wall_gain_deg'
+                    'wall_danger_min_steer_deg'
                 ).value
             )
         )
-        wall_correction = wall_gain * normalized
-
-        # Camera remains an independent second opinion. This does not use
-        # the normal confidence fusion weight because centering must remain
-        # available even when the LiDAR path fit itself is weak.
-        camera_correction = 0.0
-        camera_fresh = (
-            self.camera_stamp > 0.0
-            and self.now_sec() - self.camera_stamp
-            <= float(
-                self.get_parameter(
-                    'camera_timeout_sec'
-                ).value
-            )
-        )
-        if camera_fresh and self.camera_confidence > 0.10:
-            camera_gain = math.radians(
-                float(
-                    self.get_parameter(
-                        'center_camera_gain_deg'
-                    ).value
-                )
-            )
-            camera_correction = (
-                -camera_gain
-                * self.camera_offset
-                * self.camera_confidence
-            )
-
-        # LiDAR dominates actual wall clearance; camera damps perspective
-        # errors and keeps the road center in view.
-        correction = (
-            0.88 * wall_correction
-            + 0.12 * camera_correction
-        )
-
-        max_center = math.radians(
+        max_steer = math.radians(
             float(
                 self.get_parameter(
-                    'center_max_correction_deg'
+                    'wall_danger_max_steer_deg'
                 ).value
             )
         )
-        correction = float(np.clip(
-            correction,
-            -max_center,
-            max_center,
-        ))
+        target = (
+            min_steer
+            + severity * (max_steer - min_steer)
+        )
+        if self.wall_danger_side < 0:
+            target = -target
 
-        # Gradual lane merge: do not jump directly to the target steering
-        # angle. Limit how fast the centering correction itself can change.
         now = self.now_sec()
         dt = float(np.clip(
             now - self.center_last_update_time,
@@ -670,103 +656,48 @@ class OvertakeFusion(Node):
         ))
         self.center_last_update_time = now
 
-        center_rate = math.radians(
+        rate = math.radians(
             float(
                 self.get_parameter(
-                    'center_correction_rate_deg_s'
+                    'wall_danger_rate_deg_s'
                 ).value
             )
         )
-        max_delta = center_rate * dt
-        delta = correction - self.center_filtered_correction
+        max_delta = rate * dt
         delta = float(np.clip(
-            delta,
+            target - self.center_filtered_correction,
             -max_delta,
             max_delta,
         ))
         self.center_filtered_correction += delta
 
-        alpha = float(
-            self.get_parameter('center_steer_ema_alpha').value
+        speed_limit = float(
+            self.get_parameter('wall_danger_speed_mps').value
         )
-        alpha = float(np.clip(alpha, 0.05, 1.0))
-        correction = (
-            alpha * self.center_filtered_correction
-            + (1.0 - alpha) * correction
+        critical = float(
+            self.get_parameter('wall_danger_critical_m').value
         )
-
-        speed_limit = float('inf')
-        if self.center_align_active:
-            speed_limit = float(
-                self.get_parameter(
-                    'center_align_speed_mps'
-                ).value
-            )
-        else:
-            # Inside the release deadband, stop continuously chasing the
-            # exact center. This prevents left-right hunting.
-            self.center_filtered_correction *= 0.70
-            correction = 0.0
-
-        near_wall = float(
-            self.get_parameter('center_near_wall_m').value
-        )
-        closest = min(left_distance, right_distance)
-
-        if closest < near_wall:
+        if danger_distance < critical:
             speed_limit = min(
                 speed_limit,
                 float(
                     self.get_parameter(
-                        'center_near_wall_speed_mps'
+                        'wall_danger_critical_speed_mps'
                     ).value
                 ),
             )
-            emergency_steer = math.radians(
-                float(
-                    self.get_parameter(
-                        'center_near_wall_steer_deg'
-                    ).value
-                )
-            )
 
-            # Too close to left wall -> steer right. Too close to right wall
-            # -> steer left, following the established steering convention.
-            target_emergency = (
-                -abs(emergency_steer)
-                if left_distance < right_distance
-                else abs(emergency_steer)
-            )
+        self.center_active_pub.publish(Bool(data=True))
 
-            # Even near a wall, ramp toward the stronger correction instead
-            # of snapping the steering wheel instantly.
-            max_delta = math.radians(
-                float(
-                    self.get_parameter(
-                        'center_correction_rate_deg_s'
-                    ).value
-                )
-            ) * 0.05
-            emergency_delta = float(np.clip(
-                target_emergency - self.center_filtered_correction,
-                -max_delta,
-                max_delta,
-            ))
-            self.center_filtered_correction += emergency_delta
-            correction = self.center_filtered_correction
-            self.center_align_active = True
-
-        self.center_active_pub.publish(
-            Bool(data=bool(self.center_align_active))
+        return (
+            float(np.clip(
+                self.center_filtered_correction,
+                -self.max_steer_rad(),
+                self.max_steer_rad(),
+            )),
+            speed_limit,
+            True,
         )
-
-        correction = float(np.clip(
-            correction,
-            -self.max_steer_rad(),
-            self.max_steer_rad(),
-        ))
-
-        return correction, speed_limit, self.center_align_active
 
     def front_distance(self):
         sector = float(
@@ -1699,6 +1630,12 @@ class OvertakeFusion(Node):
 
     def publish_stop(self, mode):
         self.output_speed = 0.0
+        self.output_steer = 0.0
+        self.stop_hold_until = max(
+            self.stop_hold_until,
+            self.now_sec()
+            + float(self.get_parameter('stop_hold_sec').value),
+        )
         self.cmd_pub.publish(Twist())
         self.state_pub.publish(String(data=self.state.name))
         self.mode_pub.publish(String(data=mode))
@@ -1708,6 +1645,23 @@ class OvertakeFusion(Node):
         )
 
     def publish_command(self, speed, steer, mode):
+        now = self.now_sec()
+
+        if now < self.stop_hold_until:
+            self.output_speed = 0.0
+            self.output_steer = 0.0
+            self.cmd_pub.publish(Twist())
+            self.state_pub.publish(String(data=self.state.name))
+            self.mode_pub.publish(String(data=f'{mode}:STOP_HOLD'))
+            self.safe_speed_pub.publish(Float32(data=0.0))
+            return
+
+        deadband = float(
+            self.get_parameter('stop_speed_deadband_mps').value
+        )
+        if 0.0 <= speed < deadband:
+            speed = 0.0
+
         speed = float(np.clip(
             speed,
             0.0,
@@ -2054,7 +2008,7 @@ class OvertakeFusion(Node):
 
             if center_active:
                 speed = min(speed, center_speed_limit)
-                mode = 'CENTER_ALIGN'
+                mode = 'WALL_AVOID'
 
             safe_limit = self.safe_speed_for_distance(front)
             self.safe_speed_pub.publish(
