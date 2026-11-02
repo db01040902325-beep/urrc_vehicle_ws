@@ -30,6 +30,24 @@
           </mesh>
         </geometry>
       </visual>
+      <sensor name="race_imu" type="imu">
+        <topic>/imu</topic>
+        <update_rate>200</update_rate>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <imu>
+          <angular_velocity>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.002</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.002</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.002</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type="gaussian"><mean>0</mean><stddev>0.03</stddev></noise></x>
+            <y><noise type="gaussian"><mean>0</mean><stddev>0.03</stddev></noise></y>
+            <z><noise type="gaussian"><mean>0</mean><stddev>0.03</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
     </link>
     <link name="front_left_steering_link">
       <pose>0.165 0.095 -0.075 0 0 0</pose>
