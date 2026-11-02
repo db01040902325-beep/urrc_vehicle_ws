@@ -94,6 +94,15 @@ class OvertakeFusion(Node):
             'overtake_abort_side_m': 0.55,
             'rear_return_clear_m': 2.50,
 
+            # Rear approach / side blind-spot protection.
+            'rear_relative_speed_filter_alpha': 0.35,
+            'rear_vehicle_track_timeout_sec': 0.45,
+            'rear_ttc_block_sec': 2.00,
+            'rear_ttc_urgent_sec': 1.10,
+            'rear_vehicle_min_distance_m': 1.50,
+            'side_blindspot_m': 0.70,
+            'side_abort_m': 0.55,
+
             # Front-car discrimination: reject walls / guardrails.
             'vehicle_cluster_gap_m': 0.22,
             'vehicle_min_width_m': 0.10,
@@ -163,6 +172,10 @@ class OvertakeFusion(Node):
         self.last_vehicle_distance = None
         self.last_vehicle_stamp = 0.0
         self.filtered_closing_speed = 0.0
+
+        self.last_rear_vehicle_distance = None
+        self.last_rear_vehicle_stamp = 0.0
+        self.filtered_rear_closing_speed = 0.0
 
         self.output_speed = 0.0
         self.output_steer = 0.0
@@ -249,6 +262,18 @@ class OvertakeFusion(Node):
         )
         self.lead_speed_pub = self.create_publisher(
             Float32, '/race/front_vehicle_estimated_speed_mps', 20
+        )
+        self.rear_closing_speed_pub = self.create_publisher(
+            Float32, '/race/rear_closing_speed_mps', 20
+        )
+        self.rear_vehicle_ttc_pub = self.create_publisher(
+            Float32, '/race/rear_vehicle_ttc_sec', 20
+        )
+        self.left_blindspot_pub = self.create_publisher(
+            Bool, '/race/left_blindspot', 20
+        )
+        self.right_blindspot_pub = self.create_publisher(
+            Bool, '/race/right_blindspot', 20
         )
         self.imu_yaw_pub = self.create_publisher(
             Float32, '/race/imu_yaw_rate_rad_s', 20
@@ -497,6 +522,179 @@ class OvertakeFusion(Node):
             return None
 
         return min(candidates, key=lambda item: item[0])
+
+    def rear_vehicle_candidate(self):
+        """Return nearest compact object directly behind the car."""
+        scan = self.rear_scan
+        if scan is None or not scan.ranges:
+            return None
+
+        half_width = float(
+            self.get_parameter('vehicle_corridor_half_width_m').value
+        )
+        gap_limit = float(
+            self.get_parameter('vehicle_cluster_gap_m').value
+        )
+        min_width = float(
+            self.get_parameter('vehicle_min_width_m').value
+        )
+        max_width = float(
+            self.get_parameter('vehicle_max_width_m').value
+        )
+        max_depth = float(
+            self.get_parameter('vehicle_max_depth_m').value
+        )
+        min_points = int(
+            self.get_parameter('vehicle_min_points').value
+        )
+
+        points = []
+        for i, distance in enumerate(scan.ranges):
+            if not math.isfinite(distance):
+                continue
+            if distance < scan.range_min or distance > scan.range_max:
+                continue
+
+            angle = scan.angle_min + i * scan.angle_increment
+            x = distance * math.cos(angle)
+            y = distance * math.sin(angle)
+
+            if x <= 0.20 or abs(y) > half_width:
+                continue
+
+            points.append((i, x, y))
+
+        if not points:
+            return None
+
+        clusters = []
+        current = [points[0]]
+
+        for point in points[1:]:
+            prev = current[-1]
+            gap = math.hypot(
+                point[1] - prev[1],
+                point[2] - prev[2],
+            )
+            if point[0] - prev[0] <= 2 and gap <= gap_limit:
+                current.append(point)
+            else:
+                clusters.append(current)
+                current = [point]
+
+        if current:
+            clusters.append(current)
+
+        candidates = []
+        for cluster in clusters:
+            if len(cluster) < min_points:
+                continue
+
+            xs = [p[1] for p in cluster]
+            ys = [p[2] for p in cluster]
+            width = max(ys) - min(ys)
+            depth = max(xs) - min(xs)
+
+            if not min_width <= width <= max_width:
+                continue
+            if depth > max_depth:
+                continue
+
+            candidates.append(float(np.median(xs)))
+
+        if not candidates:
+            return None
+
+        return min(candidates)
+
+    def update_rear_motion(
+        self,
+        rear_vehicle_distance,
+        now,
+    ):
+        timeout = float(
+            self.get_parameter(
+                'rear_vehicle_track_timeout_sec'
+            ).value
+        )
+        alpha = float(
+            self.get_parameter(
+                'rear_relative_speed_filter_alpha'
+            ).value
+        )
+
+        if not math.isfinite(rear_vehicle_distance):
+            if now - self.last_rear_vehicle_stamp > timeout:
+                self.last_rear_vehicle_distance = None
+                self.filtered_rear_closing_speed = 0.0
+            return 0.0, float('inf')
+
+        raw_closing = 0.0
+
+        if (
+            self.last_rear_vehicle_distance is not None
+            and self.last_rear_vehicle_stamp > 0.0
+        ):
+            dt = now - self.last_rear_vehicle_stamp
+            if 0.01 <= dt <= timeout:
+                raw_closing = (
+                    self.last_rear_vehicle_distance
+                    - rear_vehicle_distance
+                ) / dt
+
+        self.last_rear_vehicle_distance = rear_vehicle_distance
+        self.last_rear_vehicle_stamp = now
+
+        raw_closing = float(np.clip(
+            raw_closing,
+            -20.0,
+            20.0,
+        ))
+
+        self.filtered_rear_closing_speed = (
+            alpha * raw_closing
+            + (1.0 - alpha)
+            * self.filtered_rear_closing_speed
+        )
+
+        closing = max(0.0, self.filtered_rear_closing_speed)
+
+        if closing > 0.05:
+            ttc = rear_vehicle_distance / closing
+        else:
+            ttc = float('inf')
+
+        return closing, ttc
+
+    def blindspot_distance(self, left):
+        """Estimate immediate side occupancy from front + rear LiDAR."""
+        if left:
+            front_values = self.sector_values(
+                self.scan, 58.0, 105.0
+            )
+            # Rear sensor faces backward, so base-left maps to negative angles.
+            rear_values = self.sector_values(
+                self.rear_scan, -105.0, -58.0
+            )
+        else:
+            front_values = self.sector_values(
+                self.scan, -105.0, -58.0
+            )
+            rear_values = self.sector_values(
+                self.rear_scan, 58.0, 105.0
+            )
+
+        distances = []
+        for values in (front_values, rear_values):
+            if values.size > 0:
+                distances.append(
+                    float(np.percentile(values, 12))
+                )
+
+        if not distances:
+            return float('inf')
+
+        return min(distances)
 
     def update_vehicle_motion(
         self,
@@ -1250,6 +1448,47 @@ class OvertakeFusion(Node):
             Float32(data=float(lead_speed))
         )
 
+        rear_vehicle_distance = self.rear_vehicle_candidate()
+        if rear_vehicle_distance is None:
+            rear_vehicle_distance = float('inf')
+
+        (
+            rear_closing_speed,
+            rear_vehicle_ttc,
+        ) = self.update_rear_motion(
+            rear_vehicle_distance,
+            now,
+        )
+
+        self.rear_closing_speed_pub.publish(
+            Float32(data=float(rear_closing_speed))
+        )
+        self.rear_vehicle_ttc_pub.publish(
+            Float32(
+                data=(
+                    float(rear_vehicle_ttc)
+                    if math.isfinite(rear_vehicle_ttc)
+                    else -1.0
+                )
+            )
+        )
+
+        left_blindspot_distance = self.blindspot_distance(True)
+        right_blindspot_distance = self.blindspot_distance(False)
+
+        blindspot_limit = float(
+            self.get_parameter('side_blindspot_m').value
+        )
+        left_blindspot = left_blindspot_distance < blindspot_limit
+        right_blindspot = right_blindspot_distance < blindspot_limit
+
+        self.left_blindspot_pub.publish(
+            Bool(data=left_blindspot)
+        )
+        self.right_blindspot_pub.publish(
+            Bool(data=right_blindspot)
+        )
+
         left_corridor = self.pass_corridor_clearance(True)
         right_corridor = self.pass_corridor_clearance(False)
 
@@ -1382,6 +1621,34 @@ class OvertakeFusion(Node):
                 and vehicle_ttc < ttc_urgent
             )
 
+            rear_ttc_block = float(
+                self.get_parameter('rear_ttc_block_sec').value
+            )
+            rear_min_distance = float(
+                self.get_parameter(
+                    'rear_vehicle_min_distance_m'
+                ).value
+            )
+            rear_safe_for_lane_change = (
+                not math.isfinite(rear_vehicle_distance)
+                or (
+                    rear_vehicle_distance > rear_min_distance
+                    and (
+                        not math.isfinite(rear_vehicle_ttc)
+                        or rear_vehicle_ttc > rear_ttc_block
+                    )
+                )
+            )
+
+            left_lane_safe = (
+                not left_blindspot
+                and left_corridor > corridor_need
+            )
+            right_lane_safe = (
+                not right_blindspot
+                and right_corridor > corridor_need
+            )
+
             candidate = (
                 math.isfinite(vehicle_distance)
                 and (
@@ -1391,7 +1658,8 @@ class OvertakeFusion(Node):
                         and closing_speed > 0.25
                     )
                 )
-                and max(left_corridor, right_corridor) > corridor_need
+                and (left_lane_safe or right_lane_safe)
+                and rear_safe_for_lane_change
                 and abs(steer) < max_base
                 and base_speed > 0.2
                 and cooldown_ok
@@ -1409,11 +1677,16 @@ class OvertakeFusion(Node):
                         ).value
                     )
                 ):
-                    self.pass_side = (
-                        1.0
-                        if left_corridor >= right_corridor
-                        else -1.0
-                    )
+                    if left_lane_safe and right_lane_safe:
+                        self.pass_side = (
+                            1.0
+                            if left_corridor >= right_corridor
+                            else -1.0
+                        )
+                    elif left_lane_safe:
+                        self.pass_side = 1.0
+                    else:
+                        self.pass_side = -1.0
                     self.detect_start = None
                     self.set_state(OvertakeState.SHIFT_OUT)
             else:
@@ -1479,11 +1752,17 @@ class OvertakeFusion(Node):
                 if self.pass_side > 0.0
                 else right_corridor
             )
+            selected_blindspot = (
+                left_blindspot
+                if self.pass_side > 0.0
+                else right_blindspot
+            )
             if (
-                chosen_clear
+                selected_blindspot
+                or chosen_clear
                 < float(
                     self.get_parameter(
-                        'overtake_abort_side_m'
+                        'side_abort_m'
                     ).value
                 )
             ):
@@ -1532,8 +1811,14 @@ class OvertakeFusion(Node):
                 if self.pass_side > 0.0
                 else right_corridor
             )
+            selected_pass_blindspot = (
+                left_blindspot
+                if self.pass_side > 0.0
+                else right_blindspot
+            )
             if (
-                chosen_clear
+                selected_pass_blindspot
+                or chosen_clear
                 < float(
                     self.get_parameter(
                         'overtake_abort_side_m'
@@ -1566,6 +1851,13 @@ class OvertakeFusion(Node):
                     self.get_parameter('rear_return_clear_m').value
                 )
             )
+            rear_ttc_return_ok = (
+                not math.isfinite(rear_vehicle_ttc)
+                or rear_vehicle_ttc
+                > float(
+                    self.get_parameter('rear_ttc_block_sec').value
+                )
+            )
 
             if (
                 elapsed
@@ -1574,6 +1866,7 @@ class OvertakeFusion(Node):
                 )
                 and stable_clear
                 and rear_ok
+                and rear_ttc_return_ok
             ):
                 self.set_state(OvertakeState.RETURN)
 
@@ -1584,7 +1877,15 @@ class OvertakeFusion(Node):
                     self.get_parameter('rear_return_clear_m').value
                 )
             )
-            if not rear_ok:
+            rear_ttc_urgent = float(
+                self.get_parameter('rear_ttc_urgent_sec').value
+            )
+            rear_threat = (
+                math.isfinite(rear_vehicle_ttc)
+                and rear_vehicle_ttc < rear_ttc_urgent
+            )
+
+            if not rear_ok or rear_threat:
                 # Stay in the passing lane until the overtaken vehicle has
                 # dropped safely behind.
                 self.set_state(OvertakeState.PASS)
