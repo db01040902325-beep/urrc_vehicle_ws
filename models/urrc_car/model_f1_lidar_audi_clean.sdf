@@ -5,7 +5,7 @@
     <self_collide>false</self_collide>
     <link name="chassis">
       <inertial>
-        <pose>0 0 -0.025 0 0 0</pose>
+        <pose>0 0 -0.035 0 0 0</pose>
         <mass>3.2</mass>
         <inertia>
           <ixx>0.018</ixx>
@@ -73,8 +73,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.8</mu>
-              <mu2>1.8</mu2>
+              <mu>2.2</mu>
+              <mu2>2.2</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -101,8 +101,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.8</mu>
-              <mu2>1.8</mu2>
+              <mu>2.2</mu>
+              <mu2>2.2</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -129,8 +129,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.8</mu>
-              <mu2>1.8</mu2>
+              <mu>2.2</mu>
+              <mu2>2.2</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -157,8 +157,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.8</mu>
-              <mu2>1.8</mu2>
+              <mu>2.2</mu>
+              <mu2>2.2</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -173,7 +173,7 @@
         <limit>
           <lower>-0.610865</lower>
           <upper>0.610865</upper>
-          <velocity>5.0</velocity>
+          <velocity>6.0</velocity>
           <effort>20</effort>
         </limit>
       </axis>
@@ -186,7 +186,7 @@
         <limit>
           <lower>-0.610865</lower>
           <upper>0.610865</upper>
-          <velocity>5.0</velocity>
+          <velocity>6.0</velocity>
           <effort>20</effort>
         </limit>
       </axis>
@@ -259,13 +259,13 @@
       </visual>
       <sensor name="race_lidar" type="gpu_lidar">
         <topic>/scan</topic>
-        <update_rate>30</update_rate>
+        <update_rate>50</update_rate>
         <always_on>true</always_on>
         <visualize>true</visualize>
         <lidar>
           <scan>
             <horizontal>
-              <samples>720</samples>
+              <samples>1080</samples>
               <resolution>1</resolution>
               <min_angle>-1.570796</min_angle>
               <max_angle>1.570796</max_angle>
@@ -273,7 +273,7 @@
           </scan>
           <range>
             <min>0.05</min>
-            <max>12.0</max>
+            <max>25.0</max>
             <resolution>0.01</resolution>
           </range>
         </lidar>
@@ -309,13 +309,13 @@
       </visual>
       <sensor name="rear_lidar" type="gpu_lidar">
         <topic>/rear_scan</topic>
-        <update_rate>30</update_rate>
+        <update_rate>40</update_rate>
         <always_on>true</always_on>
         <visualize>false</visualize>
         <lidar>
           <scan>
             <horizontal>
-              <samples>360</samples>
+              <samples>540</samples>
               <resolution>1</resolution>
               <min_angle>-1.570796</min_angle>
               <max_angle>1.570796</max_angle>
@@ -323,7 +323,7 @@
           </scan>
           <range>
             <min>0.05</min>
-            <max>12.0</max>
+            <max>18.0</max>
             <resolution>0.01</resolution>
           </range>
         </lidar>
@@ -379,10 +379,10 @@
       <wheel_radius>0.045</wheel_radius>
       <steering_limit>0.610865</steering_limit>
       <min_velocity>-1.5</min_velocity>
-      <max_velocity>10.0</max_velocity>
+      <max_velocity>15.0</max_velocity>
       <min_acceleration>-10.0</min_acceleration>
       <max_acceleration>10.0</max_acceleration>
-      <steer_p_gain>18.0</steer_p_gain>
+      <steer_p_gain>20.0</steer_p_gain>
       <odom_publish_frequency>100</odom_publish_frequency>
     </plugin>
   </model>
