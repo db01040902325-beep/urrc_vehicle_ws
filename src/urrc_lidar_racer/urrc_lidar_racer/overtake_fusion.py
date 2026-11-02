@@ -12,6 +12,7 @@ from std_msgs.msg import Bool, Float32, String
 
 class OvertakeState(Enum):
     CRUISE = auto()
+    DEFEND = auto()
     SHIFT_OUT = auto()
     PASS = auto()
     RETURN = auto()
@@ -103,6 +104,20 @@ class OvertakeFusion(Node):
             'side_blindspot_m': 0.70,
             'side_abort_m': 0.55,
 
+            # Safe single-move defensive driving.
+            'defense_enable': True,
+            'defense_ttc_trigger_sec': 1.80,
+            'defense_ttc_release_sec': 2.60,
+            'defense_min_closing_speed_mps': 0.50,
+            'defense_lane_target': 0.12,
+            'defense_max_sec': 1.00,
+            'defense_cooldown_sec': 2.00,
+            'defense_speed_mps': 12.0,
+            'defense_front_clear_m': 8.0,
+            'defense_side_clear_m': 1.00,
+            'defense_max_base_steer_deg': 5.0,
+            'defense_side_margin_m': 0.30,
+
             # Front-car discrimination: reject walls / guardrails.
             'vehicle_cluster_gap_m': 0.22,
             'vehicle_min_width_m': 0.10,
@@ -176,6 +191,9 @@ class OvertakeFusion(Node):
         self.last_rear_vehicle_distance = None
         self.last_rear_vehicle_stamp = 0.0
         self.filtered_rear_closing_speed = 0.0
+
+        self.defend_side = 0.0
+        self.last_defense_end = -1e9
 
         self.output_speed = 0.0
         self.output_steer = 0.0
@@ -299,11 +317,17 @@ class OvertakeFusion(Node):
         self.overtake_allowed_pub = self.create_publisher(
             Bool, '/race/overtake_allowed', 20
         )
+        self.defense_active_pub = self.create_publisher(
+            Bool, '/race/defense_active', 20
+        )
+        self.defense_side_pub = self.create_publisher(
+            Float32, '/race/defense_side', 20
+        )
 
         self.create_timer(0.02, self.control_loop)
 
         self.get_logger().info(
-            'Fusion controller: wall tracking support + IMU stabilization + overtaking'
+            'Fusion controller: wall tracking + IMU + overtaking + safe defense'
         )
 
     def now_sec(self):
@@ -665,6 +689,22 @@ class OvertakeFusion(Node):
             ttc = float('inf')
 
         return closing, ttc
+
+    def rear_side_distance(self, left):
+        """Distance to a rear vehicle approaching on either side."""
+        if left:
+            values = self.sector_values(
+                self.rear_scan, -58.0, -8.0
+            )
+        else:
+            values = self.sector_values(
+                self.rear_scan, 8.0, 58.0
+            )
+
+        if values.size == 0:
+            return float('inf')
+
+        return float(np.percentile(values, 18))
 
     def blindspot_distance(self, left):
         """Estimate immediate side occupancy from front + rear LiDAR."""
@@ -1489,6 +1529,16 @@ class OvertakeFusion(Node):
             Bool(data=right_blindspot)
         )
 
+        rear_left_distance = self.rear_side_distance(True)
+        rear_right_distance = self.rear_side_distance(False)
+
+        self.defense_active_pub.publish(
+            Bool(data=self.state == OvertakeState.DEFEND)
+        )
+        self.defense_side_pub.publish(
+            Float32(data=float(self.defend_side))
+        )
+
         left_corridor = self.pass_corridor_clearance(True)
         right_corridor = self.pass_corridor_clearance(False)
 
@@ -1649,6 +1699,101 @@ class OvertakeFusion(Node):
                 and right_corridor > corridor_need
             )
 
+            defense_enabled = bool(
+                self.get_parameter('defense_enable').value
+            )
+            defense_trigger = float(
+                self.get_parameter(
+                    'defense_ttc_trigger_sec'
+                ).value
+            )
+            defense_closing = float(
+                self.get_parameter(
+                    'defense_min_closing_speed_mps'
+                ).value
+            )
+            defense_front_clear = float(
+                self.get_parameter(
+                    'defense_front_clear_m'
+                ).value
+            )
+            defense_max_steer = math.radians(
+                float(
+                    self.get_parameter(
+                        'defense_max_base_steer_deg'
+                    ).value
+                )
+            )
+            defense_cooldown_ok = (
+                now - self.last_defense_end
+                >= float(
+                    self.get_parameter(
+                        'defense_cooldown_sec'
+                    ).value
+                )
+            )
+
+            side_margin = float(
+                self.get_parameter(
+                    'defense_side_margin_m'
+                ).value
+            )
+            attack_left = (
+                rear_left_distance + side_margin
+                < rear_right_distance
+            )
+            attack_right = (
+                rear_right_distance + side_margin
+                < rear_left_distance
+            )
+
+            defense_side_clear = float(
+                self.get_parameter(
+                    'defense_side_clear_m'
+                ).value
+            )
+
+            left_defense_safe = (
+                attack_left
+                and not left_blindspot
+                and left_corridor > defense_side_clear
+            )
+            right_defense_safe = (
+                attack_right
+                and not right_blindspot
+                and right_corridor > defense_side_clear
+            )
+
+            front_safe_for_defense = (
+                front > defense_front_clear
+                and (
+                    not math.isfinite(vehicle_distance)
+                    or vehicle_distance > defense_front_clear
+                )
+            )
+
+            defense_candidate = (
+                defense_enabled
+                and health['rear_ok']
+                and health['imu_ok']
+                and health['boundary_ok']
+                and health['camera_ok']
+                and rear_closing_speed >= defense_closing
+                and math.isfinite(rear_vehicle_ttc)
+                and rear_vehicle_ttc < defense_trigger
+                and front_safe_for_defense
+                and abs(steer) < defense_max_steer
+                and defense_cooldown_ok
+                and (left_defense_safe or right_defense_safe)
+            )
+
+            if defense_candidate:
+                self.defend_side = (
+                    1.0 if left_defense_safe else -1.0
+                )
+                self.set_state(OvertakeState.DEFEND)
+                mode = 'DEFEND_ENTER'
+
             candidate = (
                 math.isfinite(vehicle_distance)
                 and (
@@ -1666,7 +1811,10 @@ class OvertakeFusion(Node):
                 and overtake_allowed
             )
 
-            if candidate:
+            if self.state == OvertakeState.DEFEND:
+                self.detect_start = None
+
+            elif candidate:
                 if self.detect_start is None:
                     self.detect_start = now
                 elif (
@@ -1716,6 +1864,90 @@ class OvertakeFusion(Node):
                     )
                 ):
                     mode = f'{mode}:FOLLOW_LEAD'
+
+        elif self.state == OvertakeState.DEFEND:
+            elapsed = now - self.state_start
+
+            speed = min(
+                base_speed,
+                float(
+                    self.get_parameter(
+                        'defense_speed_mps'
+                    ).value
+                ),
+            )
+
+            target = (
+                self.defend_side
+                * float(
+                    self.get_parameter(
+                        'defense_lane_target'
+                    ).value
+                )
+            )
+
+            correction = self.camera_correction(
+                target,
+                0.85,
+            )
+            if correction is not None:
+                steer += correction
+
+            selected_blindspot = (
+                left_blindspot
+                if self.defend_side > 0.0
+                else right_blindspot
+            )
+            selected_clear = (
+                left_corridor
+                if self.defend_side > 0.0
+                else right_corridor
+            )
+
+            release_ttc = float(
+                self.get_parameter(
+                    'defense_ttc_release_sec'
+                ).value
+            )
+            max_duration = float(
+                self.get_parameter(
+                    'defense_max_sec'
+                ).value
+            )
+            side_need = float(
+                self.get_parameter(
+                    'defense_side_clear_m'
+                ).value
+            )
+            front_need = float(
+                self.get_parameter(
+                    'defense_front_clear_m'
+                ).value
+            )
+
+            release_defense = (
+                selected_blindspot
+                or selected_clear < side_need
+                or front < front_need
+                or (
+                    math.isfinite(vehicle_distance)
+                    and vehicle_distance < front_need
+                )
+                or rear_closing_speed < 0.20
+                or (
+                    math.isfinite(rear_vehicle_ttc)
+                    and rear_vehicle_ttc >= release_ttc
+                )
+                or elapsed >= max_duration
+            )
+
+            if release_defense:
+                self.last_defense_end = now
+                self.defend_side = 0.0
+                self.set_state(OvertakeState.CRUISE)
+                mode = 'DEFEND_RELEASE'
+            else:
+                mode = 'DEFEND_HOLD'
 
         elif self.state == OvertakeState.SHIFT_OUT:
             elapsed = now - self.state_start
