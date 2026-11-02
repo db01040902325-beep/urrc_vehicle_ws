@@ -121,6 +121,16 @@ def generate_launch_description():
         Node(
             package='ros_gz_bridge',
             executable='parameter_bridge',
+            name='imu_bridge',
+            arguments=[
+                '/imu@sensor_msgs/msg/Imu@gz.msgs.IMU'
+            ],
+            output='screen'
+        ),
+
+        Node(
+            package='ros_gz_bridge',
+            executable='parameter_bridge',
             name='camera_bridge',
             arguments=[
                 '/camera/image_raw@sensor_msgs/msg/Image@gz.msgs.Image'
