@@ -46,6 +46,7 @@ setup(
             'race_stats = urrc_lidar_racer.race_stats:main',
             'lap_timer = urrc_lidar_racer.lap_timer:main',
             'birdseye_view = urrc_lidar_racer.birdseye_view:main',
+            'drive_actuator = urrc_lidar_racer.drive_actuator:main',
         ],
     },
 )
