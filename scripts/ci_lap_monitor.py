@@ -31,6 +31,10 @@ class Monitor(Node):
         self.imu_lateral_accel = None
         self.imu_roll_deg = None
         self.stability_factor = None
+        self.curve_prediction_deg = None
+        self.curve_speed_limit = None
+        self.lidar_weight = None
+        self.camera_weight = None
 
         self.odom_count = 0
         self.last_xy = None
@@ -53,6 +57,10 @@ class Monitor(Node):
         self.create_subscription(Float32, '/race/imu_lateral_accel_mps2', self.on_imu_lat, 20)
         self.create_subscription(Float32, '/race/imu_roll_deg', self.on_imu_roll, 20)
         self.create_subscription(Float32, '/race/stability_factor', self.on_stability, 20)
+        self.create_subscription(Float32, '/race/curve_prediction_deg', self.on_curve_prediction, 20)
+        self.create_subscription(Float32, '/race/curve_speed_limit_mps', self.on_curve_speed, 20)
+        self.create_subscription(Float32, '/race/lidar_fusion_weight', self.on_lidar_weight, 20)
+        self.create_subscription(Float32, '/race/camera_fusion_weight', self.on_camera_weight, 20)
         self.create_subscription(Odometry, '/model/urrc_car/odometry', self.on_odom, 50)
 
         self.done = False
@@ -101,6 +109,18 @@ class Monitor(Node):
     def on_stability(self, msg):
         self.stability_factor = float(msg.data)
 
+    def on_curve_prediction(self, msg):
+        self.curve_prediction_deg = float(msg.data)
+
+    def on_curve_speed(self, msg):
+        self.curve_speed_limit = float(msg.data)
+
+    def on_lidar_weight(self, msg):
+        self.lidar_weight = float(msg.data)
+
+    def on_camera_weight(self, msg):
+        self.camera_weight = float(msg.data)
+
     def on_odom(self, msg):
         self.odom_count += 1
         x = float(msg.pose.pose.position.x)
@@ -136,6 +156,8 @@ class Monitor(Node):
                 f'road_conf={self.road_confidence} boundary={self.boundary_confidence} '
                 f'imu_yaw={self.imu_yaw_rate} imu_lat={self.imu_lateral_accel} '
                 f'imu_roll={self.imu_roll_deg} stability={self.stability_factor} '
+                f'curve={self.curve_prediction_deg} curve_limit={self.curve_speed_limit} '
+                f'lidar_w={self.lidar_weight} camera_w={self.camera_weight} '
                 f'mode={self.controller_mode} overtake={self.overtake_state}',
                 flush=True,
             )
@@ -166,6 +188,10 @@ class Monitor(Node):
         print(f'imu_lateral_accel_mps2={self.imu_lateral_accel}')
         print(f'imu_roll_deg={self.imu_roll_deg}')
         print(f'stability_factor={self.stability_factor}')
+        print(f'curve_prediction_deg={self.curve_prediction_deg}')
+        print(f'curve_speed_limit_mps={self.curve_speed_limit}')
+        print(f'lidar_fusion_weight={self.lidar_weight}')
+        print(f'camera_fusion_weight={self.camera_weight}')
         print('=== END_CI_RACE_SUMMARY ===')
 
 
