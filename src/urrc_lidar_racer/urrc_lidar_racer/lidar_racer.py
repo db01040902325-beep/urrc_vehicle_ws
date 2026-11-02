@@ -77,6 +77,11 @@ class LidarRacer(Node):
             '/race/continuous_boundary_confidence',
             10
         )
+        self.fallback_mode_pub = self.create_publisher(
+            Float32,
+            '/race/side_wall_fallback_active',
+            10
+        )
 
         # RViz Marker
         self.marker_pub = self.create_publisher(
@@ -168,6 +173,17 @@ class LidarRacer(Node):
             'boundary_pair_max_width_m': 4.50,
             'boundary_near_window_m': 2.00,
             'boundary_target_ema_alpha': 0.45,
+
+            # Robust side-wall centering fallback.
+            'side_wall_fallback_enable': True,
+            'side_wall_angle_min_deg': 55.0,
+            'side_wall_angle_max_deg': 88.0,
+            'side_wall_percentile': 20.0,
+            'side_wall_min_distance_m': 0.25,
+            'side_wall_max_distance_m': 4.50,
+            'side_wall_target_x_m': 3.00,
+            'side_wall_max_offset_m': 0.90,
+            'side_wall_fallback_speed_mps': 4.00,
 
             'loss_hold_frames': 2,
             'loss_slow_frames': 5,
@@ -330,6 +346,20 @@ class LidarRacer(Node):
             self.lookahead = self.lookahead_sharp
 
         target = self.find_center(left, right)
+        side_fallback_active = False
+
+        if (
+            target is None
+            and bool(self.side_wall_fallback_enable)
+        ):
+            target = self.side_wall_fallback_target(msg)
+            side_fallback_active = target is not None
+
+        self.fallback_mode_pub.publish(
+            Float32(
+                data=1.0 if side_fallback_active else 0.0
+            )
+        )
 
         # ==========================================
         # 2~4m 전방 코너 예측
@@ -473,6 +503,13 @@ class LidarRacer(Node):
         else:
             speed = self.speed_straight
 
+        # Side-wall fallback is deliberately conservative.
+        if side_fallback_active:
+            speed = min(
+                speed,
+                float(self.side_wall_fallback_speed_mps),
+            )
+
         # ==========================================
         # Preview pre-braking
         # 현재 조향이 작아도 앞쪽에 코너가 보이면 미리 감속
@@ -596,6 +633,87 @@ class LidarRacer(Node):
 
         self.steer_pub.publish(
             steer_msg
+        )
+
+    # =====================================================
+    # Side-wall fallback centering
+    # =====================================================
+
+    def side_wall_fallback_target(self, msg):
+        """Use side guardrail distance symmetry when long-range fitting fails."""
+        angle_min = math.radians(
+            float(self.side_wall_angle_min_deg)
+        )
+        angle_max = math.radians(
+            float(self.side_wall_angle_max_deg)
+        )
+        percentile = float(self.side_wall_percentile)
+
+        left_ranges = []
+        right_ranges = []
+
+        for i, distance in enumerate(msg.ranges):
+            if not math.isfinite(distance):
+                continue
+            if (
+                distance < msg.range_min
+                or distance > min(
+                    msg.range_max,
+                    float(self.side_wall_max_distance_m),
+                )
+            ):
+                continue
+
+            angle = msg.angle_min + i * msg.angle_increment
+            abs_angle = abs(angle)
+
+            if not angle_min <= abs_angle <= angle_max:
+                continue
+
+            lateral_distance = abs(
+                distance * math.sin(angle)
+            )
+
+            if (
+                lateral_distance
+                < float(self.side_wall_min_distance_m)
+                or lateral_distance
+                > float(self.side_wall_max_distance_m)
+            ):
+                continue
+
+            if angle > 0.0:
+                left_ranges.append(lateral_distance)
+            elif angle < 0.0:
+                right_ranges.append(lateral_distance)
+
+        if not left_ranges or not right_ranges:
+            return None
+
+        left_distance = self.percentile(
+            left_ranges,
+            percentile,
+        )
+        right_distance = self.percentile(
+            right_ranges,
+            percentile,
+        )
+
+        offset = 0.5 * (
+            left_distance - right_distance
+        )
+
+        max_offset = float(
+            self.side_wall_max_offset_m
+        )
+        offset = max(
+            -max_offset,
+            min(max_offset, offset),
+        )
+
+        return (
+            float(self.side_wall_target_x_m),
+            float(offset),
         )
 
     # =====================================================
