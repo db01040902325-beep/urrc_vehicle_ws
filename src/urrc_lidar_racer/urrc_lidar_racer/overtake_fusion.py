@@ -89,7 +89,7 @@ class OvertakeFusion(Node):
             'center_max_correction_deg': 10.0,
             'center_correction_rate_deg_s': 12.0,
 
-            'max_steer_deg': 35.0,
+            'max_steer_deg': 30.0,
             'max_speed_mps': 15.00,
             'raw_cmd_timeout_sec': 0.35,
             'scan_timeout_sec': 0.25,
