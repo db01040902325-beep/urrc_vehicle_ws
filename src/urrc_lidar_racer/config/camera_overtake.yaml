@@ -78,6 +78,7 @@ overtake_fusion:
     wall_danger_rate_deg_s: 10.0
 
     max_steer_deg: 30.0
+    straight_steer_deadband_deg: 2.5
     max_speed_mps: 15.00
     raw_cmd_timeout_sec: 0.35
     scan_timeout_sec: 0.25
