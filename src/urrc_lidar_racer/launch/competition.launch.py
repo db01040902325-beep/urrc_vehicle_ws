@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -78,6 +79,33 @@ def generate_launch_description():
         'race_camera_overtake.launch.py'
     )
 
+    patched_world = os.path.join(
+        tempfile.gettempdir(),
+        f'urrc_monza_vehicle_{os.getuid()}.sdf'
+    )
+
+    with open(world_file, 'r', encoding='utf-8') as handle:
+        world_text = handle.read()
+
+    if 'gz-sim-imu-system' not in world_text:
+        imu_plugin = (
+            '    <plugin filename="gz-sim-imu-system" '
+            'name="gz::sim::systems::Imu" />\n'
+        )
+        scene_marker = '    <scene>'
+        if scene_marker not in world_text:
+            raise RuntimeError(
+                'Monza world has no <scene> marker for IMU patch'
+            )
+        world_text = world_text.replace(
+            scene_marker,
+            imu_plugin + scene_marker,
+            1,
+        )
+
+    with open(patched_world, 'w', encoding='utf-8') as handle:
+        handle.write(world_text)
+
     partition = f'urrc_practice_{os.getuid()}'
 
     # Start the race world directly WITHOUT run_world.py so the official
@@ -90,7 +118,7 @@ def generate_launch_description():
             '-v',
             '3',
             '-s',
-            world_file,
+            patched_world,
         ],
         output='screen'
     )
