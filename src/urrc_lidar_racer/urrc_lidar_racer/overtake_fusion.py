@@ -86,6 +86,7 @@ class OvertakeFusion(Node):
             'wall_danger_rate_deg_s': 10.0,
 
             'max_steer_deg': 30.0,
+            'straight_steer_deadband_deg': 2.5,
             'max_speed_mps': 15.00,
             'raw_cmd_timeout_sec': 0.35,
             'scan_timeout_sec': 0.25,
@@ -1991,13 +1992,23 @@ class OvertakeFusion(Node):
         mode = self.state.name
 
         if self.state == OvertakeState.CRUISE:
-            # When wall centering is active, do not add the normal camera
-            # correction a second time. The center controller already blends
-            # LiDAR wall distance and camera road-center information.
+            # Outside a wall danger zone, ignore tiny steering noise and go
+            # straight. Camera correction is only added when the base path
+            # already indicates a real corner.
             if not center_active:
-                correction = self.camera_correction()
-                if correction is not None:
-                    steer += correction
+                straight_deadband = math.radians(
+                    float(
+                        self.get_parameter(
+                            'straight_steer_deadband_deg'
+                        ).value
+                    )
+                )
+                if abs(steer) < straight_deadband:
+                    steer = 0.0
+                else:
+                    correction = self.camera_correction()
+                    if correction is not None:
+                        steer += correction
 
             steer += center_correction
             steer = float(np.clip(
