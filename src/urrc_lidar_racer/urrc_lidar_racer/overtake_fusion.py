@@ -71,19 +71,22 @@ class OvertakeFusion(Node):
             # Wall danger-zone avoidance only.
             # Outside the danger zone this layer adds zero steering.
             'center_align_enable': True,
-            'center_wall_angle_min_deg': 40.0,
+            'center_wall_angle_min_deg': 75.0,
             'center_wall_angle_max_deg': 88.0,
-            'center_wall_percentile': 35.0,
+            'center_wall_percentile': 55.0,
             'center_wall_min_m': 0.20,
             'center_wall_max_m': 4.50,
-            'wall_danger_enter_m': 0.55,
-            'wall_danger_release_m': 0.75,
-            'wall_danger_min_steer_deg': 3.0,
-            'wall_danger_max_steer_deg': 10.0,
-            'wall_danger_speed_mps': 3.0,
-            'wall_danger_critical_m': 0.35,
-            'wall_danger_critical_speed_mps': 1.5,
-            'wall_danger_rate_deg_s': 10.0,
+            'wall_danger_enter_m': 0.50,
+            'wall_danger_release_m': 0.68,
+            'wall_danger_min_steer_deg': 2.0,
+            'wall_danger_max_steer_deg': 7.0,
+            'wall_danger_speed_mps': 2.5,
+            'wall_danger_critical_m': 0.30,
+            'wall_danger_critical_speed_mps': 1.2,
+            'wall_danger_rate_deg_s': 6.0,
+            'wall_danger_confirm_frames': 8,
+            'wall_danger_width_min_m': 0.90,
+            'wall_danger_width_max_m': 3.50,
 
             'max_steer_deg': 30.0,
             'straight_steer_deadband_deg': 2.5,
@@ -156,8 +159,8 @@ class OvertakeFusion(Node):
             'final_accel_limit_mps2': 10.0,
             'final_decel_limit_mps2': 10.0,
             'final_steer_rate_deg_s': 45.0,
-            'stop_hold_sec': 0.35,
-            'stop_speed_deadband_mps': 0.12,
+            'stop_hold_sec': 1.00,
+            'stop_speed_deadband_mps': 0.20,
 
             'overtake_max_base_steer_deg': 10.0,
             'overtake_detect_hold_sec': 0.25,
@@ -224,6 +227,8 @@ class OvertakeFusion(Node):
         self.center_filtered_correction = 0.0
         self.center_last_update_time = self.now_sec()
         self.wall_danger_side = 0
+        self.wall_left_danger_frames = 0
+        self.wall_right_danger_frames = 0
         self.stop_hold_until = 0.0
 
         self.output_speed = 0.0
@@ -586,26 +591,60 @@ class OvertakeFusion(Node):
             self.get_parameter('wall_danger_release_m').value
         )
 
-        # Hysteresis: once avoidance starts, keep avoiding the same wall
-        # until that wall is safely outside the release distance.
+        width = left_distance + right_distance
+        width_ok = (
+            float(
+                self.get_parameter(
+                    'wall_danger_width_min_m'
+                ).value
+            )
+            <= width
+            <= float(
+                self.get_parameter(
+                    'wall_danger_width_max_m'
+                ).value
+            )
+        )
+
+        if width_ok and left_distance < enter and right_distance >= enter:
+            self.wall_left_danger_frames += 1
+        else:
+            self.wall_left_danger_frames = 0
+
+        if width_ok and right_distance < enter and left_distance >= enter:
+            self.wall_right_danger_frames += 1
+        else:
+            self.wall_right_danger_frames = 0
+
+        confirm_frames = int(
+            self.get_parameter(
+                'wall_danger_confirm_frames'
+            ).value
+        )
+
+        # Hysteresis + temporal confirmation. A single odd LiDAR return must
+        # never cause a lane-change-like steering event.
         if self.center_align_active:
             tracked = (
                 left_distance
                 if self.wall_danger_side < 0
                 else right_distance
             )
-            if tracked >= release:
+            if tracked >= release or not width_ok:
                 self.center_align_active = False
                 self.wall_danger_side = 0
+                self.center_filtered_correction = 0.0
         else:
-            if left_distance < enter or right_distance < enter:
-                if left_distance <= right_distance:
-                    # Left wall danger -> steer right (negative).
-                    self.wall_danger_side = -1
-                else:
-                    # Right wall danger -> steer left (positive).
-                    self.wall_danger_side = 1
+            if self.wall_left_danger_frames >= confirm_frames:
+                # Left wall danger -> steer right (negative).
+                self.wall_danger_side = -1
                 self.center_align_active = True
+                self.wall_left_danger_frames = 0
+            elif self.wall_right_danger_frames >= confirm_frames:
+                # Right wall danger -> steer left (positive).
+                self.wall_danger_side = 1
+                self.center_align_active = True
+                self.wall_right_danger_frames = 0
 
         if not self.center_align_active:
             self.center_filtered_correction = 0.0
