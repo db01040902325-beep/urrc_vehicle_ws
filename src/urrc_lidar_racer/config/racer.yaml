@@ -4,7 +4,7 @@ lidar_racer:
     # 차량
     wheelbase: 0.330
     track_width: 1.50
-    max_steer_deg: 35.0
+    max_steer_deg: 30.0
 
     # 조향 안정화
     steer_ema_alpha: 0.45
