@@ -40,6 +40,23 @@ overtake_fusion:
     overtake_side_clear_m: 0.82
     overtake_abort_side_m: 0.55
     rear_return_clear_m: 1.20
+
+    # 앞차 판별: 긴 벽/가드레일 대신 차량 크기 클러스터만 추월 대상으로 사용
+    vehicle_cluster_gap_m: 0.18
+    vehicle_min_width_m: 0.10
+    vehicle_max_width_m: 0.60
+    vehicle_max_depth_m: 0.75
+    vehicle_min_points: 4
+    vehicle_corridor_half_width_m: 0.70
+
+    # 추월 측면 공간 + 연속 추월 방지
+    pass_corridor_min_m: 0.78
+    overtake_cooldown_sec: 1.50
+
+    # 최종 명령 평활화
+    final_accel_limit_mps2: 3.5
+    final_decel_limit_mps2: 7.5
+    final_steer_rate_deg_s: 150.0
     overtake_max_base_steer_deg: 8.0
     overtake_detect_hold_sec: 0.25
     shift_out_sec: 0.85
