@@ -2,6 +2,10 @@ camera_perception:
   ros__parameters:
     image_topic: /camera/image_raw
     road_confidence_min_area_ratio: 0.08
+    road_roi_top_ratio: 0.34
+    road_roi_top_left_ratio: 0.24
+    road_roi_top_right_ratio: 0.76
+    road_far_weight: 0.55
 
     # 5등 신호등: 빨간색 면적이 아니라 실제 램프 개수로 판단
     start_gate_enable: true
