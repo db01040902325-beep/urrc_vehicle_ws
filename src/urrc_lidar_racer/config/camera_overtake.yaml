@@ -2,33 +2,48 @@ camera_perception:
   ros__parameters:
     image_topic: /camera/image_raw
     road_confidence_min_area_ratio: 0.08
+
+    # 5등 신호등: 빨간색 면적이 아니라 실제 램프 개수로 판단
     start_gate_enable: true
-    red_on_ratio: 0.0015
-    red_off_ratio: 0.00045
-    red_seen_frames: 3
-    red_off_frames: 4
+    start_full_on_min_count: 4
+    start_off_max_count: 1
+    start_seen_frames: 3
+    start_off_frames: 4
+    lamp_roi_y_max_ratio: 0.48
+    lamp_roi_x_min_ratio: 0.15
+    lamp_roi_x_max_ratio: 0.85
 
 overtake_fusion:
   ros__parameters:
     raw_cmd_topic: /race/lidar_cmd_vel
     final_cmd_topic: /model/urrc_car/cmd_vel
     scan_topic: /scan
+    rear_scan_topic: /rear_scan
     wheelbase: 0.330
     camera_gain_deg: 5.5
     camera_min_confidence: 0.35
+    camera_fallback_enable: true
+    camera_fallback_speed_mps: 1.60
+    camera_fallback_gain_scale: 1.35
     max_steer_deg: 28.0
     max_speed_mps: 6.30
     raw_cmd_timeout_sec: 0.35
+    scan_timeout_sec: 0.40
     emergency_stop_m: 0.55
+    hard_ttc_sec: 0.18
+    reaction_time_sec: 0.20
+    brake_decel_mps2: 7.5
+    safety_margin_m: 0.35
     overtake_trigger_m: 2.20
+    overtake_trigger_margin_m: 0.80
     overtake_front_clear_m: 3.00
     overtake_side_clear_m: 0.82
     overtake_abort_side_m: 0.55
+    rear_return_clear_m: 1.20
     overtake_max_base_steer_deg: 8.0
     overtake_detect_hold_sec: 0.25
     shift_out_sec: 0.85
     pass_min_sec: 0.45
-    pass_max_sec: 2.00
     return_sec: 0.95
     pass_lane_target: 0.30
     fallback_shift_bias_deg: 3.5
