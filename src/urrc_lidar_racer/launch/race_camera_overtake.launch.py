@@ -141,29 +141,9 @@ def generate_launch_description():
         Node(
             package='ros_gz_bridge',
             executable='parameter_bridge',
-            name='left_wheel_velocity_bridge',
+            name='cmd_vel_bridge',
             arguments=[
-                '/model/urrc_car/left_wheel_velocity@std_msgs/msg/Float64]gz.msgs.Double'
-            ],
-            output='screen'
-        ),
-
-        Node(
-            package='ros_gz_bridge',
-            executable='parameter_bridge',
-            name='right_wheel_velocity_bridge',
-            arguments=[
-                '/model/urrc_car/right_wheel_velocity@std_msgs/msg/Float64]gz.msgs.Double'
-            ],
-            output='screen'
-        ),
-
-        Node(
-            package='ros_gz_bridge',
-            executable='parameter_bridge',
-            name='steer_angle_bridge',
-            arguments=[
-                '/model/urrc_car/steer_angle@std_msgs/msg/Float64]gz.msgs.Double'
+                '/model/urrc_car/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist'
             ],
             output='screen'
         ),
@@ -200,13 +180,6 @@ def generate_launch_description():
             executable='overtake_fusion',
             name='overtake_fusion',
             parameters=[fusion_config],
-            output='screen'
-        ),
-
-        Node(
-            package='urrc_lidar_racer',
-            executable='drive_actuator',
-            name='drive_actuator',
             output='screen'
         ),
 
