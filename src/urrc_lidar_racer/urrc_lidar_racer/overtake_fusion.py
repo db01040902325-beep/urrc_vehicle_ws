@@ -48,6 +48,13 @@ class OvertakeFusion(Node):
             'camera_gain_deg': 5.5,
             'camera_min_confidence': 0.35,
             'camera_fallback_enable': True,
+
+            # Confidence-based LiDAR + camera steering fusion.
+            'boundary_confidence_topic': '/race/continuous_boundary_confidence',
+            'fusion_lidar_min_confidence': 0.25,
+            'fusion_camera_min_weight': 0.20,
+            'sensor_degraded_confidence': 0.20,
+            'sensor_degraded_speed_mps': 4.0,
             'camera_fallback_speed_mps': 3.00,
             'camera_fallback_gain_scale': 1.35,
 
@@ -121,6 +128,7 @@ class OvertakeFusion(Node):
 
         self.camera_offset = 0.0
         self.camera_confidence = 0.0
+        self.boundary_confidence = 0.0
         self.start_allowed = not bool(
             self.get_parameter('start_gate_enable').value
         )
@@ -173,6 +181,16 @@ class OvertakeFusion(Node):
             10,
         )
         self.create_subscription(
+            Float32,
+            str(
+                self.get_parameter(
+                    'boundary_confidence_topic'
+                ).value
+            ),
+            self.on_boundary_confidence,
+            10,
+        )
+        self.create_subscription(
             Bool,
             '/camera/start_allowed',
             self.on_start_allowed,
@@ -210,6 +228,12 @@ class OvertakeFusion(Node):
         )
         self.stability_factor_pub = self.create_publisher(
             Float32, '/race/stability_factor', 20
+        )
+        self.lidar_weight_pub = self.create_publisher(
+            Float32, '/race/lidar_fusion_weight', 20
+        )
+        self.camera_weight_pub = self.create_publisher(
+            Float32, '/race/camera_fusion_weight', 20
         )
 
         self.create_timer(0.02, self.control_loop)
@@ -267,6 +291,11 @@ class OvertakeFusion(Node):
 
     def on_camera_confidence(self, msg):
         self.camera_confidence = float(np.clip(msg.data, 0.0, 1.0))
+
+    def on_boundary_confidence(self, msg):
+        self.boundary_confidence = float(
+            np.clip(msg.data, 0.0, 1.0)
+        )
 
     def on_start_allowed(self, msg):
         self.start_allowed = bool(msg.data)
@@ -669,6 +698,32 @@ class OvertakeFusion(Node):
             steer, -self.max_steer_rad(), self.max_steer_rad()
         ))
 
+    def fusion_weights(self):
+        lidar_weight = float(
+            np.clip(self.boundary_confidence, 0.0, 1.0)
+        )
+
+        minimum_camera_weight = float(
+            self.get_parameter(
+                'fusion_camera_min_weight'
+            ).value
+        )
+
+        # Camera influence grows as LiDAR confidence drops.
+        camera_scale = max(
+            minimum_camera_weight,
+            1.0 - lidar_weight,
+        )
+        camera_weight = float(
+            np.clip(
+                self.camera_confidence * camera_scale,
+                0.0,
+                1.0,
+            )
+        )
+
+        return lidar_weight, camera_weight
+
     def camera_correction(self, target_offset=0.0, scale=1.0):
         minimum = float(
             self.get_parameter('camera_min_confidence').value
@@ -680,8 +735,14 @@ class OvertakeFusion(Node):
             float(self.get_parameter('camera_gain_deg').value)
         )
         error = self.camera_offset - target_offset
+
+        _, camera_weight = self.fusion_weights()
+
         return (
-            -gain * error * self.camera_confidence * scale
+            -gain
+            * error
+            * camera_weight
+            * scale
         )
 
     def dynamic_stop_distance(self, speed):
@@ -828,6 +889,14 @@ class OvertakeFusion(Node):
 
         base_speed = max(0.0, float(self.raw_cmd.linear.x))
         steer = self.raw_steer_rad(base_speed)
+
+        lidar_weight, camera_weight = self.fusion_weights()
+        self.lidar_weight_pub.publish(
+            Float32(data=float(lidar_weight))
+        )
+        self.camera_weight_pub.publish(
+            Float32(data=float(camera_weight))
+        )
 
         front = self.front_distance()
         left = self.side_clearance(True)
@@ -1169,6 +1238,25 @@ class OvertakeFusion(Node):
             if elapsed >= duration:
                 self.last_overtake_end = now
                 self.set_state(OvertakeState.CRUISE)
+
+        degraded_confidence = float(
+            self.get_parameter(
+                'sensor_degraded_confidence'
+            ).value
+        )
+        if (
+            self.boundary_confidence < degraded_confidence
+            and self.camera_confidence < degraded_confidence
+        ):
+            speed = min(
+                speed,
+                float(
+                    self.get_parameter(
+                        'sensor_degraded_speed_mps'
+                    ).value
+                ),
+            )
+            mode = f'{mode}:SENSOR_DEGRADED'
 
         self.publish_command(speed, steer, mode)
 
