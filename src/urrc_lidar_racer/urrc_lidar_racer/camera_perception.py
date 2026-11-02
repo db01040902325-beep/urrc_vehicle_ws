@@ -30,6 +30,10 @@ class CameraPerception(Node):
         self.full_on_frames = 0
         self.off_frames = 0
         self.full_on_seen = False
+        self.last_offset = 0.0
+        self.last_confidence = 0.0
+        self.last_red_ratio = 0.0
+        self.last_lamp_count = 0
         self.start_allowed = not bool(
             self.get_parameter('start_gate_enable').value
         )
@@ -53,6 +57,9 @@ class CameraPerception(Node):
             Int32, '/camera/red_light_count', 10
         )
 
+        # Keep status topics alive even between camera frames.
+        self.create_timer(0.10, self.publish_status)
+
         self.get_logger().info(
             f'Camera perception started: {image_topic}'
         )
@@ -72,15 +79,32 @@ class CameraPerception(Node):
             return
 
         offset, confidence = self.estimate_road_center(frame)
-        self.offset_pub.publish(Float32(data=float(offset)))
-        self.conf_pub.publish(Float32(data=float(confidence)))
-
         lamp_count, red_ratio = self.detect_start_lamps(frame)
-        self.red_pub.publish(Float32(data=float(red_ratio)))
-        self.red_count_pub.publish(Int32(data=int(lamp_count)))
+
+        self.last_offset = float(offset)
+        self.last_confidence = float(confidence)
+        self.last_red_ratio = float(red_ratio)
+        self.last_lamp_count = int(lamp_count)
 
         self.update_start_gate(lamp_count)
-        self.start_pub.publish(Bool(data=bool(self.start_allowed)))
+        self.publish_status()
+
+    def publish_status(self):
+        self.offset_pub.publish(
+            Float32(data=float(self.last_offset))
+        )
+        self.conf_pub.publish(
+            Float32(data=float(self.last_confidence))
+        )
+        self.start_pub.publish(
+            Bool(data=bool(self.start_allowed))
+        )
+        self.red_pub.publish(
+            Float32(data=float(self.last_red_ratio))
+        )
+        self.red_count_pub.publish(
+            Int32(data=int(self.last_lamp_count))
+        )
 
     def estimate_road_center(self, frame):
         h, w = frame.shape[:2]
