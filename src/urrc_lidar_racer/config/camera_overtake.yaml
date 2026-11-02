@@ -61,6 +61,10 @@ overtake_fusion:
     raw_cmd_timeout_sec: 0.35
     scan_timeout_sec: 0.25
     emergency_stop_m: 1.00
+    front_min_valid_range_m: 0.25
+    front_sector_deg: 7.0
+    front_percentile: 25.0
+    front_emergency_confirm_frames: 3
     hard_ttc_sec: 0.30
     reaction_time_sec: 0.25
     brake_decel_mps2: 10.0
