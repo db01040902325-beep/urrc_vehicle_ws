@@ -189,8 +189,8 @@
       <axis>
         <xyz>0 0 1</xyz>
         <limit>
-          <lower>-0.610865</lower>
-          <upper>0.610865</upper>
+          <lower>-0.523599</lower>
+          <upper>0.523599</upper>
           <velocity>10.0</velocity>
           <effort>35</effort>
         </limit>
@@ -206,8 +206,8 @@
       <axis>
         <xyz>0 0 1</xyz>
         <limit>
-          <lower>-0.610865</lower>
-          <upper>0.610865</upper>
+          <lower>-0.523599</lower>
+          <upper>0.523599</upper>
           <velocity>10.0</velocity>
           <effort>35</effort>
         </limit>
@@ -227,8 +227,8 @@
           <upper>1.79769e+308</upper>
         </limit>
         <dynamics>
-          <damping>0.08</damping>
-          <friction>0.02</friction>
+          <damping>0.22</damping>
+          <friction>0.05</friction>
         </dynamics>
       </axis>
     </joint>
@@ -242,8 +242,8 @@
           <upper>1.79769e+308</upper>
         </limit>
         <dynamics>
-          <damping>0.08</damping>
-          <friction>0.02</friction>
+          <damping>0.22</damping>
+          <friction>0.05</friction>
         </dynamics>
       </axis>
     </joint>
@@ -257,8 +257,8 @@
           <upper>1.79769e+308</upper>
         </limit>
         <dynamics>
-          <damping>0.08</damping>
-          <friction>0.02</friction>
+          <damping>0.22</damping>
+          <friction>0.05</friction>
         </dynamics>
       </axis>
     </joint>
@@ -272,8 +272,8 @@
           <upper>1.79769e+308</upper>
         </limit>
         <dynamics>
-          <damping>0.08</damping>
-          <friction>0.02</friction>
+          <damping>0.22</damping>
+          <friction>0.05</friction>
         </dynamics>
       </axis>
     </joint>
@@ -424,12 +424,12 @@
       <kingpin_width>0.190</kingpin_width>
       <wheel_radius>0.045</wheel_radius>
       <steering_limit>0.523599</steering_limit>
-      <min_velocity>-15.0</min_velocity>
+      <min_velocity>0.0</min_velocity>
       <max_velocity>15.0</max_velocity>
-      <min_acceleration>-6.0</min_acceleration>
-      <max_acceleration>8.0</max_acceleration>
-      <min_jerk>-20.0</min_jerk>
-      <max_jerk>20.0</max_jerk>
+      <min_acceleration>-4.0</min_acceleration>
+      <max_acceleration>6.0</max_acceleration>
+      <min_jerk>-10.0</min_jerk>
+      <max_jerk>10.0</max_jerk>
       <odom_publish_frequency>100</odom_publish_frequency>
       <topic>/model/urrc_car/cmd_vel</topic>
     </plugin>
