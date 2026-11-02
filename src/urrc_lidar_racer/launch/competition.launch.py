@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -55,6 +56,27 @@ def generate_launch_description():
         'scripts',
         'traffic_lights_v10.py'
     )
+
+    grid_data_file = os.path.join(
+        track_share,
+        'tracks',
+        'processed',
+        'monza.json'
+    )
+
+    with open(grid_data_file, 'r', encoding='utf-8') as handle:
+        monza_data = json.load(handle)
+
+    grid_1 = monza_data['grid'][0]
+    spawn_x = float(grid_1['x'])
+    spawn_y = float(grid_1['y'])
+    spawn_yaw = float(grid_1['yaw'])
+    road_z = float(grid_1['road_z'])
+
+    # Wheel center is 0.075 m below model origin and radius is 0.045 m.
+    # Add 5 mm clearance so the tires settle onto the road instead of
+    # spawning inside the collision mesh.
+    spawn_z = road_z + 0.075 + 0.045 + 0.005
 
     gui_config = os.path.join(
         track_share,
@@ -150,12 +172,12 @@ for i in $(seq 1 160); do
             world:=monza \
             file:={vehicle_file} \
             entity_name:=urrc_car \
-            x:=0.3786723464 \
-            y:=-2.0560353977 \
-            z:=1.2435265615 \
+            x:={spawn_x} \
+            y:={spawn_y} \
+            z:={spawn_z} \
             R:=0.0 \
             P:=0.0 \
-            Y:=1.4573844161
+            Y:={spawn_yaw}
     fi
 
     sleep 0.25
