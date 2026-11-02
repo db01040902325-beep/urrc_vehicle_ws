@@ -24,9 +24,14 @@ class LidarRacer(Node):
             10
         )
 
+        self.declare_parameter(
+            'cmd_topic',
+            '/race/lidar_cmd_vel',
+        )
+
         self.cmd_pub = self.create_publisher(
             Twist,
-            '/model/urrc_car/cmd_vel',
+            str(self.get_parameter('cmd_topic').value),
             10
         )
 
@@ -95,6 +100,7 @@ class LidarRacer(Node):
         # =========================
 
         defaults = {
+            'cmd_topic': '/race/lidar_cmd_vel',
             'wheelbase': 0.330,
             'track_width': 1.50,
             'max_steer_deg': 28.0,
