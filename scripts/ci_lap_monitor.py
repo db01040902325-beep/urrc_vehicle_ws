@@ -40,6 +40,10 @@ class Monitor(Node):
         self.front_vehicle_speed = None
         self.sensor_health = 'UNKNOWN'
         self.overtake_allowed = None
+        self.rear_closing_speed = None
+        self.rear_vehicle_ttc = None
+        self.left_blindspot = None
+        self.right_blindspot = None
 
         self.odom_count = 0
         self.last_xy = None
@@ -71,6 +75,10 @@ class Monitor(Node):
         self.create_subscription(Float32, '/race/front_vehicle_estimated_speed_mps', self.on_vehicle_speed, 20)
         self.create_subscription(String, '/race/sensor_health', self.on_sensor_health, 20)
         self.create_subscription(Bool, '/race/overtake_allowed', self.on_overtake_allowed, 20)
+        self.create_subscription(Float32, '/race/rear_closing_speed_mps', self.on_rear_closing, 20)
+        self.create_subscription(Float32, '/race/rear_vehicle_ttc_sec', self.on_rear_ttc, 20)
+        self.create_subscription(Bool, '/race/left_blindspot', self.on_left_blindspot, 20)
+        self.create_subscription(Bool, '/race/right_blindspot', self.on_right_blindspot, 20)
         self.create_subscription(Odometry, '/model/urrc_car/odometry', self.on_odom, 50)
 
         self.done = False
@@ -146,6 +154,18 @@ class Monitor(Node):
     def on_overtake_allowed(self, msg):
         self.overtake_allowed = bool(msg.data)
 
+    def on_rear_closing(self, msg):
+        self.rear_closing_speed = float(msg.data)
+
+    def on_rear_ttc(self, msg):
+        self.rear_vehicle_ttc = float(msg.data)
+
+    def on_left_blindspot(self, msg):
+        self.left_blindspot = bool(msg.data)
+
+    def on_right_blindspot(self, msg):
+        self.right_blindspot = bool(msg.data)
+
     def on_odom(self, msg):
         self.odom_count += 1
         x = float(msg.pose.pose.position.x)
@@ -186,6 +206,8 @@ class Monitor(Node):
                 f'closing={self.front_closing_speed} ttc={self.front_vehicle_ttc} '
                 f'lead_v={self.front_vehicle_speed} '
                 f'health={self.sensor_health} overtake_ok={self.overtake_allowed} '
+                f'rear_closing={self.rear_closing_speed} rear_ttc={self.rear_vehicle_ttc} '
+                f'blind_l={self.left_blindspot} blind_r={self.right_blindspot} '
                 f'mode={self.controller_mode} overtake={self.overtake_state}',
                 flush=True,
             )
@@ -225,6 +247,10 @@ class Monitor(Node):
         print(f'front_vehicle_estimated_speed_mps={self.front_vehicle_speed}')
         print(f'sensor_health={self.sensor_health}')
         print(f'overtake_allowed={self.overtake_allowed}')
+        print(f'rear_closing_speed_mps={self.rear_closing_speed}')
+        print(f'rear_vehicle_ttc_sec={self.rear_vehicle_ttc}')
+        print(f'left_blindspot={self.left_blindspot}')
+        print(f'right_blindspot={self.right_blindspot}')
         print('=== END_CI_RACE_SUMMARY ===')
 
 
