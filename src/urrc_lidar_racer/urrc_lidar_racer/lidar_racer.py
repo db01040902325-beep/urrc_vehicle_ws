@@ -100,7 +100,6 @@ class LidarRacer(Node):
         # =========================
 
         defaults = {
-            'cmd_topic': '/race/lidar_cmd_vel',
             'wheelbase': 0.330,
             'track_width': 1.50,
             'max_steer_deg': 28.0,
