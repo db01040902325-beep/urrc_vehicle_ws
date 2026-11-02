@@ -624,12 +624,15 @@ class OvertakeFusion(Node):
             if depth > max_depth:
                 continue
 
-            candidates.append(float(np.median(xs)))
+            candidates.append((
+                float(np.median(xs)),
+                float(np.median(ys)),
+            ))
 
         if not candidates:
             return None
 
-        return min(candidates)
+        return min(candidates, key=lambda item: item[0])
 
     def update_rear_motion(
         self,
@@ -1488,9 +1491,13 @@ class OvertakeFusion(Node):
             Float32(data=float(lead_speed))
         )
 
-        rear_vehicle_distance = self.rear_vehicle_candidate()
-        if rear_vehicle_distance is None:
+        rear_vehicle = self.rear_vehicle_candidate()
+        if rear_vehicle is None:
             rear_vehicle_distance = float('inf')
+            rear_vehicle_lateral = 0.0
+        else:
+            rear_vehicle_distance = float(rear_vehicle[0])
+            rear_vehicle_lateral = float(rear_vehicle[1])
 
         (
             rear_closing_speed,
@@ -1738,14 +1745,11 @@ class OvertakeFusion(Node):
                     'defense_side_margin_m'
                 ).value
             )
-            attack_left = (
-                rear_left_distance + side_margin
-                < rear_right_distance
-            )
-            attack_right = (
-                rear_right_distance + side_margin
-                < rear_left_distance
-            )
+
+            # Rear LiDAR faces backward: negative sensor-y corresponds
+            # to the vehicle's left side, positive sensor-y to right.
+            attack_left = rear_vehicle_lateral < -side_margin
+            attack_right = rear_vehicle_lateral > side_margin
 
             defense_side_clear = float(
                 self.get_parameter(
@@ -1778,6 +1782,12 @@ class OvertakeFusion(Node):
                 and health['imu_ok']
                 and health['boundary_ok']
                 and health['camera_ok']
+                and self.camera_confidence
+                >= float(
+                    self.get_parameter(
+                        'camera_min_confidence'
+                    ).value
+                )
                 and rear_closing_speed >= defense_closing
                 and math.isfinite(rear_vehicle_ttc)
                 and rear_vehicle_ttc < defense_trigger
@@ -1890,7 +1900,8 @@ class OvertakeFusion(Node):
                 target,
                 0.85,
             )
-            if correction is not None:
+            correction_valid = correction is not None
+            if correction_valid:
                 steer += correction
 
             selected_blindspot = (
@@ -1926,7 +1937,8 @@ class OvertakeFusion(Node):
             )
 
             release_defense = (
-                selected_blindspot
+                not correction_valid
+                or selected_blindspot
                 or selected_clear < side_need
                 or front < front_need
                 or (
