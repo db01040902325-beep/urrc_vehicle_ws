@@ -151,6 +151,24 @@ class LidarRacer(Node):
             'curve_speed_hard': 6.0,
             'curve_min_confidence': 0.25,
 
+            # Hairpin / sharp-corner detector.
+            # Detect a broad wall ahead and turn toward the side with more
+            # free space before the normal x-binned boundary tracker fails.
+            'hairpin_enable': True,
+            'hairpin_front_sector_deg': 14.0,
+            'hairpin_front_trigger_m': 8.0,
+            'hairpin_front_release_m': 10.0,
+            'hairpin_front_hit_ratio': 0.55,
+            'hairpin_side_inner_deg': 20.0,
+            'hairpin_side_outer_deg': 72.0,
+            'hairpin_open_margin_m': 0.80,
+            'hairpin_min_open_m': 2.00,
+            'hairpin_steer_min_deg': 10.0,
+            'hairpin_steer_max_deg': 26.0,
+            'hairpin_speed_mps': 4.0,
+            'hairpin_confirm_frames': 3,
+            'hairpin_release_frames': 4,
+
             'front_stop_distance': 1.00,
             'front_slow_distance': 4.00,
             'ttc_stop_sec': 0.30,
@@ -229,6 +247,17 @@ class LidarRacer(Node):
 
         # 순간적인 LiDAR 경계 손실 복구
         self.miss_count = 0
+
+        self.hairpin_active = False
+        self.hairpin_direction = 0
+        self.hairpin_confirm_count = 0
+        self.hairpin_release_count = 0
+
+        self.hairpin_pub = self.create_publisher(
+            Float32,
+            '/race/hairpin_direction',
+            10
+        )
 
         self.frame_id = 'urrc_car/lidar_link/race_lidar'
 
@@ -333,6 +362,15 @@ class LidarRacer(Node):
 
         self.boundary_mode_pub.publish(
             Float32(data=float(boundary_confidence))
+        )
+
+        (
+            hairpin_steer_deg,
+            hairpin_speed_limit,
+        ) = self.detect_hairpin(msg)
+
+        self.hairpin_pub.publish(
+            Float32(data=float(self.hairpin_direction))
         )
 
         # ==========================================
@@ -456,6 +494,12 @@ class LidarRacer(Node):
         # - = 좌회전
         steer_user_deg = -delta_left_deg
 
+        # Hairpin override: when a broad wall closes the lane ahead, normal
+        # x-binned wall tracking becomes unreliable. Use the side opening
+        # direction until the corner is entered.
+        if self.hairpin_active and hairpin_steer_deg is not None:
+            steer_user_deg = float(hairpin_steer_deg)
+
         steer_user_deg = max(
             -self.max_steer_deg,
             min(self.max_steer_deg, steer_user_deg)
@@ -509,6 +553,12 @@ class LidarRacer(Node):
 
         else:
             speed = self.speed_straight
+
+        if self.hairpin_active:
+            speed = min(
+                speed,
+                float(hairpin_speed_limit),
+            )
 
         # Side-wall fallback is deliberately conservative.
         if side_fallback_active:
@@ -640,6 +690,169 @@ class LidarRacer(Node):
 
         self.steer_pub.publish(
             steer_msg
+        )
+
+    # =====================================================
+    # Hairpin / sharp-corner detection
+    # =====================================================
+
+    def sector_scan_stats(self, msg, deg_min, deg_max):
+        total = 0
+        hits = []
+
+        for i, distance in enumerate(msg.ranges):
+            angle_deg = math.degrees(
+                msg.angle_min + i * msg.angle_increment
+            )
+            if angle_deg < deg_min or angle_deg > deg_max:
+                continue
+
+            total += 1
+            if not math.isfinite(distance):
+                continue
+            if distance < msg.range_min:
+                continue
+            if distance > min(
+                msg.range_max,
+                float(self.lidar_max_use_range),
+            ):
+                continue
+            hits.append(float(distance))
+
+        if total <= 0:
+            return float('inf'), 0.0
+
+        if not hits:
+            return float('inf'), 0.0
+
+        return (
+            self.percentile(hits, 50.0),
+            len(hits) / float(total),
+        )
+
+    def detect_hairpin(self, msg):
+        if not bool(self.hairpin_enable):
+            self.hairpin_active = False
+            self.hairpin_direction = 0
+            return None, float(self.speed_straight)
+
+        front_half = float(self.hairpin_front_sector_deg)
+        front_distance, front_ratio = self.sector_scan_stats(
+            msg,
+            -front_half,
+            front_half,
+        )
+
+        inner = float(self.hairpin_side_inner_deg)
+        outer = float(self.hairpin_side_outer_deg)
+
+        left_distance, _ = self.sector_scan_stats(
+            msg,
+            inner,
+            outer,
+        )
+        right_distance, _ = self.sector_scan_stats(
+            msg,
+            -outer,
+            -inner,
+        )
+
+        # No return in a side sector means that side is very open.
+        open_cap = min(
+            float(self.lidar_max_use_range),
+            float(self.hairpin_front_trigger_m) * 2.0,
+        )
+        left_open = (
+            open_cap
+            if not math.isfinite(left_distance)
+            else min(left_distance, open_cap)
+        )
+        right_open = (
+            open_cap
+            if not math.isfinite(right_distance)
+            else min(right_distance, open_cap)
+        )
+
+        trigger = float(self.hairpin_front_trigger_m)
+        release = float(self.hairpin_front_release_m)
+        hit_ratio_required = float(self.hairpin_front_hit_ratio)
+        margin = float(self.hairpin_open_margin_m)
+        minimum_open = float(self.hairpin_min_open_m)
+
+        candidate_direction = 0
+        broad_wall = (
+            math.isfinite(front_distance)
+            and front_distance <= trigger
+            and front_ratio >= hit_ratio_required
+        )
+
+        if broad_wall:
+            if (
+                right_open >= minimum_open
+                and right_open - left_open >= margin
+            ):
+                # User convention: positive = right.
+                candidate_direction = 1
+            elif (
+                left_open >= minimum_open
+                and left_open - right_open >= margin
+            ):
+                # User convention: negative = left.
+                candidate_direction = -1
+
+        if not self.hairpin_active:
+            if candidate_direction != 0:
+                if candidate_direction == self.hairpin_direction:
+                    self.hairpin_confirm_count += 1
+                else:
+                    self.hairpin_direction = candidate_direction
+                    self.hairpin_confirm_count = 1
+            else:
+                self.hairpin_direction = 0
+                self.hairpin_confirm_count = 0
+
+            if self.hairpin_confirm_count >= int(
+                self.hairpin_confirm_frames
+            ):
+                self.hairpin_active = True
+                self.hairpin_release_count = 0
+        else:
+            if (
+                math.isfinite(front_distance)
+                and front_distance < release
+            ):
+                self.hairpin_release_count = 0
+            else:
+                self.hairpin_release_count += 1
+
+            if self.hairpin_release_count >= int(
+                self.hairpin_release_frames
+            ):
+                self.hairpin_active = False
+                self.hairpin_direction = 0
+                self.hairpin_confirm_count = 0
+                self.hairpin_release_count = 0
+
+        if not self.hairpin_active or self.hairpin_direction == 0:
+            return None, float(self.speed_straight)
+
+        opening_delta = abs(right_open - left_open)
+        severity = max(
+            0.0,
+            min(
+                1.0,
+                opening_delta / max(trigger, 0.1),
+            ),
+        )
+
+        steer_min = float(self.hairpin_steer_min_deg)
+        steer_max = float(self.hairpin_steer_max_deg)
+        steer = steer_min + severity * (steer_max - steer_min)
+        steer *= float(self.hairpin_direction)
+
+        return (
+            float(steer),
+            float(self.hairpin_speed_mps),
         )
 
     # =====================================================
