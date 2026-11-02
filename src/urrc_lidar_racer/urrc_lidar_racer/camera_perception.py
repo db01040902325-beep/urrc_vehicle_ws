@@ -17,6 +17,10 @@ class CameraPerception(Node):
 
         self.declare_parameter('image_topic', '/camera/image_raw')
         self.declare_parameter('road_confidence_min_area_ratio', 0.08)
+        self.declare_parameter('road_roi_top_ratio', 0.34)
+        self.declare_parameter('road_roi_top_left_ratio', 0.24)
+        self.declare_parameter('road_roi_top_right_ratio', 0.76)
+        self.declare_parameter('road_far_weight', 0.55)
         self.declare_parameter('start_gate_enable', True)
         self.declare_parameter('start_full_on_min_count', 5)
         self.declare_parameter('start_off_max_count', 1)
@@ -117,11 +121,25 @@ class CameraPerception(Node):
         )
 
         roi = np.zeros_like(mask)
+        top_ratio = float(
+            self.get_parameter('road_roi_top_ratio').value
+        )
+        top_left = float(
+            self.get_parameter(
+                'road_roi_top_left_ratio'
+            ).value
+        )
+        top_right = float(
+            self.get_parameter(
+                'road_roi_top_right_ratio'
+            ).value
+        )
+
         polygon = np.array([[
             (int(0.05 * w), h - 1),
             (int(0.95 * w), h - 1),
-            (int(0.70 * w), int(0.45 * h)),
-            (int(0.30 * w), int(0.45 * h)),
+            (int(top_right * w), int(top_ratio * h)),
+            (int(top_left * w), int(top_ratio * h)),
         ]], dtype=np.int32)
         cv2.fillPoly(roi, polygon, 255)
         mask = cv2.bitwise_and(mask, roi)
@@ -163,7 +181,10 @@ class CameraPerception(Node):
         if len(xs) == 0:
             return 0.0, 0.0
 
-        weights = 0.35 + 0.65 * (
+        far_weight = float(
+            self.get_parameter('road_far_weight').value
+        )
+        weights = far_weight + (1.0 - far_weight) * (
             ys.astype(np.float32) / max(1.0, float(h - 1))
         )
         cx = float(np.average(xs.astype(np.float32), weights=weights))
