@@ -65,6 +65,24 @@ def generate_launch_description():
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
+            name='rear_lidar_static_tf',
+            arguments=[
+                '--x', '-0.20',
+                '--y', '0.0',
+                '--z', '-0.040',
+                '--roll', '0.0',
+                '--pitch', '0.0',
+                '--yaw', '3.14159265',
+                '--frame-id', 'base_link',
+                '--child-frame-id',
+                'urrc_car/rear_lidar_link/rear_lidar'
+            ],
+            output='screen'
+        ),
+
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
             name='camera_static_tf',
             arguments=[
                 '--x', '0.16',
@@ -86,6 +104,16 @@ def generate_launch_description():
             name='scan_bridge',
             arguments=[
                 '/scan@sensor_msgs/msg/LaserScan@gz.msgs.LaserScan'
+            ],
+            output='screen'
+        ),
+
+        Node(
+            package='ros_gz_bridge',
+            executable='parameter_bridge',
+            name='rear_scan_bridge',
+            arguments=[
+                '/rear_scan@sensor_msgs/msg/LaserScan@gz.msgs.LaserScan'
             ],
             output='screen'
         ),
