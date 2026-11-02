@@ -399,7 +399,7 @@
       <wheel_separation>0.190</wheel_separation>
       <kingpin_width>0.190</kingpin_width>
       <wheel_radius>0.045</wheel_radius>
-      <steering_limit>0.610865</steering_limit>
+      <steering_limit>0.523599</steering_limit>
       <min_velocity>-15.0</min_velocity>
       <max_velocity>15.0</max_velocity>
       <min_acceleration>-10.0</min_acceleration>
