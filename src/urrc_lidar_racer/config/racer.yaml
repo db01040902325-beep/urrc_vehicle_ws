@@ -45,6 +45,19 @@ lidar_racer:
     preview_speed_12deg: 6.00
     preview_speed_18deg: 4.50
 
+    # 15 m/s 고속 코너 선행예측
+    curve_prediction_enable: true
+    curve_near_distance: 6.0
+    curve_mid_distance: 12.0
+    curve_far_distance: 18.0
+    curve_soft_deg: 4.0
+    curve_medium_deg: 8.0
+    curve_hard_deg: 14.0
+    curve_speed_soft: 10.0
+    curve_speed_medium: 8.0
+    curve_speed_hard: 6.0
+    curve_min_confidence: 0.25
+
     # 안전
     front_stop_distance: 1.00
     front_slow_distance: 4.00
