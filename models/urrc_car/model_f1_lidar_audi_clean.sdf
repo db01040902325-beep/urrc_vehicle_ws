@@ -213,7 +213,7 @@
       <parent>front_left_steering_link</parent>
       <child>front_left_wheel</child>
       <axis>
-        <xyz>0 0 1</xyz>
+        <xyz expressed_in="__model__">0 1 0</xyz>
         <limit>
           <lower>-1.79769e+308</lower>
           <upper>1.79769e+308</upper>
@@ -224,7 +224,7 @@
       <parent>front_right_steering_link</parent>
       <child>front_right_wheel</child>
       <axis>
-        <xyz>0 0 1</xyz>
+        <xyz expressed_in="__model__">0 1 0</xyz>
         <limit>
           <lower>-1.79769e+308</lower>
           <upper>1.79769e+308</upper>
@@ -235,7 +235,7 @@
       <parent>chassis</parent>
       <child>rear_left_wheel</child>
       <axis>
-        <xyz>0 0 1</xyz>
+        <xyz expressed_in="__model__">0 1 0</xyz>
         <limit>
           <lower>-1.79769e+308</lower>
           <upper>1.79769e+308</upper>
@@ -246,7 +246,7 @@
       <parent>chassis</parent>
       <child>rear_right_wheel</child>
       <axis>
-        <xyz>0 0 1</xyz>
+        <xyz expressed_in="__model__">0 1 0</xyz>
         <limit>
           <lower>-1.79769e+308</lower>
           <upper>1.79769e+308</upper>
@@ -326,7 +326,9 @@
         </material>
       </visual>
       <sensor name="rear_lidar" type="gpu_lidar">
+        <pose>0 0 0 0 0 0</pose>
         <topic>/rear_scan</topic>
+        <gz_frame_id>urrc_car/rear_lidar_link/rear_lidar</gz_frame_id>
         <update_rate>40</update_rate>
         <always_on>true</always_on>
         <visualize>false</visualize>
