@@ -59,6 +59,16 @@ overtake_fusion:
     overtake_trigger_m: 17.50
     overtake_trigger_margin_m: 2.00
     overtake_front_clear_m: 12.00
+
+    # 상대속도 + TTC 기반 능동 추월 / 추종
+    relative_speed_filter_alpha: 0.35
+    vehicle_track_timeout_sec: 0.40
+    overtake_ttc_trigger_sec: 2.20
+    overtake_ttc_urgent_sec: 1.20
+    follow_ttc_target_sec: 2.80
+    follow_min_gap_m: 2.00
+    follow_speed_margin_mps: 0.40
+
     overtake_side_clear_m: 0.82
     overtake_abort_side_m: 0.55
     rear_return_clear_m: 2.50
