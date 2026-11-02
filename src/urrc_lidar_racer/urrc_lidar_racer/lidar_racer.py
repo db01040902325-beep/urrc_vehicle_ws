@@ -156,17 +156,17 @@ class LidarRacer(Node):
             # free space before the normal x-binned boundary tracker fails.
             'hairpin_enable': True,
             'hairpin_front_sector_deg': 14.0,
-            'hairpin_front_trigger_m': 8.0,
-            'hairpin_front_release_m': 10.0,
-            'hairpin_front_hit_ratio': 0.55,
+            'hairpin_front_trigger_m': 10.0,
+            'hairpin_front_release_m': 12.0,
+            'hairpin_front_hit_ratio': 0.35,
             'hairpin_side_inner_deg': 20.0,
             'hairpin_side_outer_deg': 72.0,
-            'hairpin_open_margin_m': 0.80,
+            'hairpin_open_margin_m': 0.50,
             'hairpin_min_open_m': 2.00,
             'hairpin_steer_min_deg': 10.0,
             'hairpin_steer_max_deg': 26.0,
-            'hairpin_speed_mps': 4.0,
-            'hairpin_confirm_frames': 3,
+            'hairpin_speed_mps': 3.5,
+            'hairpin_confirm_frames': 2,
             'hairpin_release_frames': 4,
 
             'front_stop_distance': 1.00,
@@ -454,8 +454,16 @@ class LidarRacer(Node):
         )
 
         if target is None:
-            self.handle_track_loss(msg)
-            return
+            if self.hairpin_active and hairpin_steer_deg is not None:
+                # Keep the steering pipeline alive through a sharp corner
+                # even when the normal x-binned left/right boundary pair
+                # disappears. Hairpin steering below will override this
+                # synthetic straight-ahead target.
+                target = (3.0, 0.0)
+                side_fallback_active = False
+            else:
+                self.handle_track_loss(msg)
+                return
 
         # 정상 검출로 복귀
         self.miss_count = 0
