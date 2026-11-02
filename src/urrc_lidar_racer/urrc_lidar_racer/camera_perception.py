@@ -18,7 +18,7 @@ class CameraPerception(Node):
         self.declare_parameter('image_topic', '/camera/image_raw')
         self.declare_parameter('road_confidence_min_area_ratio', 0.08)
         self.declare_parameter('start_gate_enable', True)
-        self.declare_parameter('start_full_on_min_count', 4)
+        self.declare_parameter('start_full_on_min_count', 5)
         self.declare_parameter('start_off_max_count', 1)
         self.declare_parameter('start_seen_frames', 3)
         self.declare_parameter('start_off_frames', 4)
