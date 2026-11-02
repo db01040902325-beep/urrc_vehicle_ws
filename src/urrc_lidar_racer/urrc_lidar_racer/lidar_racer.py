@@ -76,59 +76,59 @@ class LidarRacer(Node):
             'track_width': 1.50,
             'max_steer_deg': 28.0,
 
-            'steer_ema_alpha': 0.35,
-            'max_steer_step_deg': 4.0,
+            'steer_ema_alpha': 0.30,
+            'max_steer_step_deg': 3.0,
 
-            'lookahead_straight': 5.00,
-            'lookahead_medium': 3.50,
-            'lookahead_sharp': 2.20,
+            'lookahead_straight': 9.00,
+            'lookahead_medium': 6.00,
+            'lookahead_sharp': 3.50,
             'lookahead_medium_threshold_deg': 8.0,
             'lookahead_sharp_threshold_deg': 18.0,
 
-            'speed_straight': 10.00,
-            'speed_curve_1': 8.00,
-            'speed_curve_2': 6.00,
-            'speed_curve_3': 4.50,
-            'speed_sharp': 3.20,
+            'speed_straight': 15.00,
+            'speed_curve_1': 10.00,
+            'speed_curve_2': 8.00,
+            'speed_curve_3': 6.00,
+            'speed_sharp': 4.50,
 
-            'speed_threshold_1_deg': 4.0,
-            'speed_threshold_2_deg': 8.0,
-            'speed_threshold_3_deg': 15.0,
-            'speed_threshold_4_deg': 22.0,
+            'speed_threshold_1_deg': 2.0,
+            'speed_threshold_2_deg': 5.0,
+            'speed_threshold_3_deg': 10.0,
+            'speed_threshold_4_deg': 18.0,
 
-            'lateral_accel_limit_mps2': 8.5,
-            'high_speed_steer_soft_limit_deg': 12.0,
-            'high_speed_steer_threshold_mps': 7.0,
+            'lateral_accel_limit_mps2': 18.0,
+            'high_speed_steer_soft_limit_deg': 8.0,
+            'high_speed_steer_threshold_mps': 10.0,
 
-            'preview_distance': 7.5,
-            'preview_min_x': 2.00,
-            'preview_max_x': 10.50,
-            'preview_max_pair_dx': 0.80,
+            'preview_distance': 12.0,
+            'preview_min_x': 3.00,
+            'preview_max_x': 18.00,
+            'preview_max_pair_dx': 1.20,
 
-            'preview_speed_4deg': 8.00,
-            'preview_speed_7deg': 6.00,
-            'preview_speed_12deg': 4.50,
-            'preview_speed_18deg': 3.20,
+            'preview_speed_4deg': 10.00,
+            'preview_speed_7deg': 8.00,
+            'preview_speed_12deg': 6.00,
+            'preview_speed_18deg': 4.50,
 
-            'front_stop_distance': 0.70,
-            'front_slow_distance': 1.50,
-            'ttc_stop_sec': 0.25,
-            'ttc_slow_sec': 0.90,
-            'emergency_slow_speed': 1.20,
+            'front_stop_distance': 1.00,
+            'front_slow_distance': 4.00,
+            'ttc_stop_sec': 0.30,
+            'ttc_slow_sec': 1.10,
+            'emergency_slow_speed': 2.50,
 
-            'lidar_max_use_range': 11.0,
-            'cluster_gap': 0.12,
+            'lidar_max_use_range': 22.0,
+            'cluster_gap': 0.18,
             'cluster_max_width': 0.22,
 
             'detection_min_x': 0.15,
-            'detection_max_x': 10.5,
+            'detection_max_x': 20.0,
             'detection_max_abs_y': 1.50,
             'side_deadband_y': 0.15,
 
             'loss_hold_frames': 2,
             'loss_slow_frames': 5,
-            'loss_hold_speed': 2.00,
-            'loss_slow_speed': 1.20,
+            'loss_hold_speed': 3.00,
+            'loss_slow_speed': 1.80,
         }
 
         for name, value in defaults.items():
@@ -183,10 +183,10 @@ class LidarRacer(Node):
 
             # 주요 안전 조건
             if param.name == 'speed_straight':
-                if value <= 0.0 or value > 10.0:
+                if value <= 0.0 or value > 15.0:
                     return SetParametersResult(
                         successful=False,
-                        reason='speed_straight must be 0~10 m/s'
+                        reason='speed_straight must be 0~15 m/s'
                     )
 
             if param.name == 'max_steer_deg':
@@ -418,7 +418,7 @@ class LidarRacer(Node):
         else:
             lateral_speed_limit = self.speed_straight
 
-        # Above 7 m/s, avoid large instantaneous steering commands.
+        # Above 10 m/s, avoid large instantaneous steering commands.
         if speed >= self.high_speed_steer_threshold_mps:
             soft_limit = float(
                 self.high_speed_steer_soft_limit_deg
