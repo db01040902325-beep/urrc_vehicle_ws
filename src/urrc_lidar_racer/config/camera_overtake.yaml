@@ -39,7 +39,7 @@ overtake_fusion:
     imu_spin_yaw_rate_rad_s: 6.0
     imu_min_speed_factor: 0.35
     imu_steer_damping: 0.70
-    camera_gain_deg: 24.0
+    camera_gain_deg: 12.0
     camera_min_confidence: 0.35
     camera_fallback_enable: true
 
@@ -48,38 +48,39 @@ overtake_fusion:
     fusion_lidar_min_confidence: 0.25
     fusion_camera_min_weight: 0.20
     sensor_degraded_confidence: 0.20
-    sensor_degraded_speed_mps: 6.0
+    sensor_degraded_speed_mps: 4.0
 
     # 센서 상태 감시 / Fail-safe
     camera_timeout_sec: 0.50
     boundary_timeout_sec: 0.35
     rear_scan_timeout_sec: 0.35
-    camera_fail_speed_mps: 18.0
-    rear_lidar_fail_speed_mps: 15.0
-    multi_sensor_fail_speed_mps: 6.0
+    camera_fail_speed_mps: 12.0
+    rear_lidar_fail_speed_mps: 10.0
+    multi_sensor_fail_speed_mps: 4.0
 
-    camera_fallback_speed_mps: 4.50
+    camera_fallback_speed_mps: 3.00
     camera_fallback_gain_scale: 1.45
 
     # LiDAR 양쪽 가드레일 + 카메라 도로 중심으로 차량 중앙 정렬
     center_align_enable: true
-    center_wall_angle_min_deg: 55.0
+    center_wall_angle_min_deg: 40.0
     center_wall_angle_max_deg: 88.0
-    center_wall_percentile: 30.0
+    center_wall_percentile: 35.0
     center_wall_min_m: 0.25
     center_wall_max_m: 4.50
-    center_error_scale_m: 0.65
-    center_wall_gain_deg: 32.0
-    center_camera_gain_deg: 12.0
-    center_align_engage_error_m: 0.12
-    center_align_release_error_m: 0.05
-    center_align_speed_mps: 7.0
-    center_near_wall_m: 0.48
-    center_near_wall_speed_mps: 3.0
-    center_near_wall_steer_deg: 35.0
+    center_error_scale_m: 0.80
+    center_wall_gain_deg: 18.0
+    center_camera_gain_deg: 6.0
+    center_align_engage_error_m: 0.18
+    center_align_release_error_m: 0.08
+    center_align_speed_mps: 4.0
+    center_near_wall_m: 0.55
+    center_near_wall_speed_mps: 2.0
+    center_near_wall_steer_deg: 24.0
+    center_steer_ema_alpha: 0.22
 
     max_steer_deg: 35.0
-    max_speed_mps: 22.50
+    max_speed_mps: 15.00
     raw_cmd_timeout_sec: 0.35
     scan_timeout_sec: 0.25
     emergency_stop_m: 1.00
@@ -91,9 +92,9 @@ overtake_fusion:
     reaction_time_sec: 0.25
     brake_decel_mps2: 10.0
     safety_margin_m: 0.50
-    overtake_trigger_m: 26.25
+    overtake_trigger_m: 17.50
     overtake_trigger_margin_m: 2.00
-    overtake_front_clear_m: 18.00
+    overtake_front_clear_m: 12.00
 
     # 상대속도 + TTC 기반 능동 추월 / 추종
     relative_speed_filter_alpha: 0.35
@@ -125,7 +126,7 @@ overtake_fusion:
     defense_lane_target: 0.12
     defense_max_sec: 1.00
     defense_cooldown_sec: 2.00
-    defense_speed_mps: 18.0
+    defense_speed_mps: 12.0
     defense_front_clear_m: 8.0
     defense_side_clear_m: 1.00
     defense_max_base_steer_deg: 7.5
@@ -146,7 +147,7 @@ overtake_fusion:
     # 최종 명령 평활화
     final_accel_limit_mps2: 10.0
     final_decel_limit_mps2: 10.0
-    final_steer_rate_deg_s: 130.0
+    final_steer_rate_deg_s: 75.0
     overtake_max_base_steer_deg: 10.0
     overtake_detect_hold_sec: 0.25
     shift_out_sec: 0.85
@@ -155,7 +156,7 @@ overtake_fusion:
     pass_lane_target: 0.30
     fallback_shift_bias_deg: 3.5
     fallback_return_bias_deg: 3.0
-    shift_speed_mps: 15.00
-    overtake_speed_mps: 22.50
-    return_speed_mps: 15.00
+    shift_speed_mps: 10.00
+    overtake_speed_mps: 15.00
+    return_speed_mps: 10.00
     start_gate_enable: true
