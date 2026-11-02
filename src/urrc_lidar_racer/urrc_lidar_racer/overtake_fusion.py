@@ -53,6 +53,24 @@ class OvertakeFusion(Node):
             'overtake_side_clear_m': 0.82,
             'overtake_abort_side_m': 0.55,
             'rear_return_clear_m': 1.20,
+
+            # Front-car discrimination: reject walls / guardrails.
+            'vehicle_cluster_gap_m': 0.18,
+            'vehicle_min_width_m': 0.10,
+            'vehicle_max_width_m': 0.60,
+            'vehicle_max_depth_m': 0.75,
+            'vehicle_min_points': 4,
+            'vehicle_corridor_half_width_m': 0.70,
+
+            # Pass corridor and repeated-overtake protection.
+            'pass_corridor_min_m': 0.78,
+            'overtake_cooldown_sec': 1.50,
+
+            # Final actuator smoothing.
+            'final_accel_limit_mps2': 3.5,
+            'final_decel_limit_mps2': 7.5,
+            'final_steer_rate_deg_s': 150.0,
+
             'overtake_max_base_steer_deg': 8.0,
             'overtake_detect_hold_sec': 0.25,
 
@@ -92,6 +110,11 @@ class OvertakeFusion(Node):
         self.detect_start = None
         self.pass_side = 1.0
         self.front_clear_since = None
+        self.last_overtake_end = -1e9
+
+        self.output_speed = 0.0
+        self.output_steer = 0.0
+        self.last_output_time = self.now_sec()
 
         self.create_subscription(
             Twist,
@@ -143,6 +166,12 @@ class OvertakeFusion(Node):
         )
         self.safe_speed_pub = self.create_publisher(
             Float32, '/race/safe_speed_limit_mps', 10
+        )
+        self.front_object_pub = self.create_publisher(
+            Float32, '/race/front_vehicle_distance_m', 10
+        )
+        self.front_object_detected_pub = self.create_publisher(
+            Bool, '/race/front_vehicle_detected', 10
         )
 
         self.create_timer(0.02, self.control_loop)
@@ -223,6 +252,171 @@ class OvertakeFusion(Node):
         if values.size == 0:
             return float('inf')
         return float(np.percentile(values, 18))
+
+    def front_vehicle_candidate(self):
+        """Return nearest compact object that resembles another 1/10 car.
+
+        Long continuous surfaces are rejected so guardrails and walls do not
+        directly trigger overtaking.
+        """
+        scan = self.scan
+        if scan is None or not scan.ranges:
+            return None
+
+        half_width = float(
+            self.get_parameter('vehicle_corridor_half_width_m').value
+        )
+        gap_limit = float(
+            self.get_parameter('vehicle_cluster_gap_m').value
+        )
+        min_width = float(
+            self.get_parameter('vehicle_min_width_m').value
+        )
+        max_width = float(
+            self.get_parameter('vehicle_max_width_m').value
+        )
+        max_depth = float(
+            self.get_parameter('vehicle_max_depth_m').value
+        )
+        min_points = int(
+            self.get_parameter('vehicle_min_points').value
+        )
+
+        points = []
+        for i, distance in enumerate(scan.ranges):
+            if not math.isfinite(distance):
+                continue
+            if distance < scan.range_min or distance > scan.range_max:
+                continue
+
+            angle = scan.angle_min + i * scan.angle_increment
+            x = distance * math.cos(angle)
+            y = distance * math.sin(angle)
+
+            if x <= 0.20:
+                continue
+            if abs(y) > half_width:
+                continue
+
+            points.append((i, x, y))
+
+        if not points:
+            return None
+
+        clusters = []
+        current = [points[0]]
+
+        for point in points[1:]:
+            prev = current[-1]
+            index_gap = point[0] - prev[0]
+            euclidean = math.hypot(
+                point[1] - prev[1],
+                point[2] - prev[2],
+            )
+
+            if index_gap <= 2 and euclidean <= gap_limit:
+                current.append(point)
+            else:
+                clusters.append(current)
+                current = [point]
+
+        if current:
+            clusters.append(current)
+
+        candidates = []
+
+        for cluster in clusters:
+            if len(cluster) < min_points:
+                continue
+
+            xs = [p[1] for p in cluster]
+            ys = [p[2] for p in cluster]
+
+            lateral_width = max(ys) - min(ys)
+            depth = max(xs) - min(xs)
+
+            if lateral_width < min_width or lateral_width > max_width:
+                continue
+            if depth > max_depth:
+                continue
+
+            center_x = float(np.median(xs))
+            center_y = float(np.median(ys))
+
+            # Keep the object mostly in the forward driving corridor.
+            if abs(center_y) > half_width:
+                continue
+
+            candidates.append((
+                center_x,
+                center_y,
+                lateral_width,
+                depth,
+                len(cluster),
+            ))
+
+        if not candidates:
+            return None
+
+        return min(candidates, key=lambda item: item[0])
+
+    def pass_corridor_clearance(self, left):
+        """Conservative free-space estimate for the intended pass side."""
+        if left:
+            sectors = [(10.0, 30.0), (30.0, 52.0), (52.0, 72.0)]
+        else:
+            sectors = [(-30.0, -10.0), (-52.0, -30.0), (-72.0, -52.0)]
+
+        estimates = []
+        for lo, hi in sectors:
+            values = self.sector_values(self.scan, lo, hi)
+            if values.size == 0:
+                continue
+            estimates.append(float(np.percentile(values, 22)))
+
+        if not estimates:
+            return 0.0
+
+        return min(estimates)
+
+    def limit_final_command(self, requested_speed, requested_steer):
+        now = self.now_sec()
+        dt = float(np.clip(
+            now - self.last_output_time,
+            0.005,
+            0.10,
+        ))
+        self.last_output_time = now
+
+        accel = float(
+            self.get_parameter('final_accel_limit_mps2').value
+        )
+        decel = float(
+            self.get_parameter('final_decel_limit_mps2').value
+        )
+
+        speed_delta = requested_speed - self.output_speed
+        if speed_delta >= 0.0:
+            speed_delta = min(speed_delta, accel * dt)
+        else:
+            speed_delta = max(speed_delta, -decel * dt)
+
+        self.output_speed += speed_delta
+
+        steer_rate = math.radians(
+            float(
+                self.get_parameter('final_steer_rate_deg_s').value
+            )
+        )
+        steer_delta = requested_steer - self.output_steer
+        steer_delta = float(np.clip(
+            steer_delta,
+            -steer_rate * dt,
+            steer_rate * dt,
+        ))
+        self.output_steer += steer_delta
+
+        return self.output_speed, self.output_steer
 
     def max_steer_rad(self):
         return math.radians(
@@ -309,6 +503,7 @@ class OvertakeFusion(Node):
         )
 
     def publish_stop(self, mode):
+        self.output_speed = 0.0
         self.cmd_pub.publish(Twist())
         self.state_pub.publish(String(data=self.state.name))
         self.mode_pub.publish(String(data=mode))
@@ -325,6 +520,8 @@ class OvertakeFusion(Node):
             -self.max_steer_rad(),
             self.max_steer_rad(),
         ))
+
+        speed, steer = self.limit_final_command(speed, steer)
 
         command = Twist()
         command.linear.x = speed
@@ -378,6 +575,21 @@ class OvertakeFusion(Node):
         left = self.side_clearance(True)
         right = self.side_clearance(False)
         rear = self.rear_distance()
+
+        vehicle = self.front_vehicle_candidate()
+        if vehicle is None:
+            vehicle_distance = float('inf')
+            self.front_object_detected_pub.publish(Bool(data=False))
+            self.front_object_pub.publish(Float32(data=-1.0))
+        else:
+            vehicle_distance = float(vehicle[0])
+            self.front_object_detected_pub.publish(Bool(data=True))
+            self.front_object_pub.publish(
+                Float32(data=vehicle_distance)
+            )
+
+        left_corridor = self.pass_corridor_clearance(True)
+        right_corridor = self.pass_corridor_clearance(False)
 
         emergency = float(
             self.get_parameter('emergency_stop_m').value
@@ -471,12 +683,30 @@ class OvertakeFusion(Node):
                 )
             )
 
+            corridor_need = max(
+                side_need,
+                float(
+                    self.get_parameter(
+                        'pass_corridor_min_m'
+                    ).value
+                ),
+            )
+            cooldown_ok = (
+                now - self.last_overtake_end
+                >= float(
+                    self.get_parameter(
+                        'overtake_cooldown_sec'
+                    ).value
+                )
+            )
+
             candidate = (
-                math.isfinite(front)
-                and front < trigger
-                and max(left, right) > side_need
+                math.isfinite(vehicle_distance)
+                and vehicle_distance < trigger
+                and max(left_corridor, right_corridor) > corridor_need
                 and abs(steer) < max_base
                 and base_speed > 0.2
+                and cooldown_ok
             )
 
             if candidate:
@@ -490,7 +720,11 @@ class OvertakeFusion(Node):
                         ).value
                     )
                 ):
-                    self.pass_side = 1.0 if left >= right else -1.0
+                    self.pass_side = (
+                        1.0
+                        if left_corridor >= right_corridor
+                        else -1.0
+                    )
                     self.detect_start = None
                     self.set_state(OvertakeState.SHIFT_OUT)
             else:
@@ -527,7 +761,11 @@ class OvertakeFusion(Node):
                     )
                 )
 
-            chosen_clear = left if self.pass_side > 0.0 else right
+            chosen_clear = (
+                left_corridor
+                if self.pass_side > 0.0
+                else right_corridor
+            )
             if (
                 chosen_clear
                 < float(
@@ -558,7 +796,11 @@ class OvertakeFusion(Node):
             if correction is not None:
                 steer += correction
 
-            chosen_clear = left if self.pass_side > 0.0 else right
+            chosen_clear = (
+                left_corridor
+                if self.pass_side > 0.0
+                else right_corridor
+            )
             if (
                 chosen_clear
                 < float(
@@ -572,7 +814,12 @@ class OvertakeFusion(Node):
             front_clear = float(
                 self.get_parameter('overtake_front_clear_m').value
             )
-            if front > front_clear:
+            pass_front = (
+                vehicle_distance
+                if math.isfinite(vehicle_distance)
+                else front
+            )
+            if pass_front > front_clear:
                 if self.front_clear_since is None:
                     self.front_clear_since = now
             else:
@@ -662,6 +909,7 @@ class OvertakeFusion(Node):
                 )
 
             if elapsed >= duration:
+                self.last_overtake_end = now
                 self.set_state(OvertakeState.CRUISE)
 
         self.publish_command(speed, steer, mode)
