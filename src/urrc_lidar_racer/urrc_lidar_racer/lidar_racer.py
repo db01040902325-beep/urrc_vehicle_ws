@@ -189,6 +189,8 @@ class LidarRacer(Node):
             'loss_slow_frames': 5,
             'loss_hold_speed': 3.00,
             'loss_slow_speed': 1.80,
+            'loss_recovery_speed': 1.00,
+            'loss_recovery_front_clear_m': 1.25,
         }
 
         for name, value in defaults.items():
@@ -409,7 +411,7 @@ class LidarRacer(Node):
         )
 
         if target is None:
-            self.handle_track_loss()
+            self.handle_track_loss(msg)
             return
 
         # 정상 검출로 복귀
@@ -720,7 +722,7 @@ class LidarRacer(Node):
     # Temporary track-loss recovery
     # =====================================================
 
-    def handle_track_loss(self):
+    def handle_track_loss(self, msg):
 
         self.miss_count += 1
 
@@ -737,10 +739,19 @@ class LidarRacer(Node):
             steer = self.filtered_steer_deg
 
         # 장시간 검출 실패:
-        # 완전 정지
+        # 전방이 비어 있으면 1 m/s 직진 복구를 계속 시도한다.
         else:
-            speed = 0.0
-            steer = 0.0
+            front = self.front_distance(msg)
+            if (
+                not math.isfinite(front)
+                or front > float(self.loss_recovery_front_clear_m)
+            ):
+                speed = float(self.loss_recovery_speed)
+                steer = 0.0
+            else:
+                speed = 0.0
+                steer = 0.0
+
             self.filtered_steer_deg = 0.0
             self.have_filtered_target = False
 
