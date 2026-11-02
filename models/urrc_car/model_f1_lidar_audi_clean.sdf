@@ -91,8 +91,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>2.2</mu>
-              <mu2>2.2</mu2>
+              <mu>1.6</mu>
+              <mu2>1.6</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -119,8 +119,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>2.2</mu>
-              <mu2>2.2</mu2>
+              <mu>1.6</mu>
+              <mu2>1.6</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -147,8 +147,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>2.2</mu>
-              <mu2>2.2</mu2>
+              <mu>1.6</mu>
+              <mu2>1.6</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -175,8 +175,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>2.2</mu>
-              <mu2>2.2</mu2>
+              <mu>1.6</mu>
+              <mu2>1.6</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -389,10 +389,13 @@
     </joint>
 
     <plugin filename="gz-sim-ackermann-steering-system" name="gz::sim::systems::AckermannSteering">
+      <left_joint>front_left_wheel_joint</left_joint>
       <left_joint>rear_left_wheel_joint</left_joint>
+      <right_joint>front_right_wheel_joint</right_joint>
       <right_joint>rear_right_wheel_joint</right_joint>
       <left_steering_joint>front_left_steering_joint</left_steering_joint>
       <right_steering_joint>front_right_steering_joint</right_steering_joint>
+      <topic>/model/urrc_car/cmd_vel</topic>
       <wheel_base>0.330</wheel_base>
       <wheel_separation>0.190</wheel_separation>
       <kingpin_width>0.190</kingpin_width>
