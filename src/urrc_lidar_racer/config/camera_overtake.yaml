@@ -38,6 +38,13 @@ overtake_fusion:
     camera_gain_deg: 5.5
     camera_min_confidence: 0.35
     camera_fallback_enable: true
+
+    # LiDAR + 카메라 신뢰도 기반 융합
+    boundary_confidence_topic: /race/continuous_boundary_confidence
+    fusion_lidar_min_confidence: 0.25
+    fusion_camera_min_weight: 0.20
+    sensor_degraded_confidence: 0.20
+    sensor_degraded_speed_mps: 4.0
     camera_fallback_speed_mps: 3.00
     camera_fallback_gain_scale: 1.35
     max_steer_deg: 28.0
