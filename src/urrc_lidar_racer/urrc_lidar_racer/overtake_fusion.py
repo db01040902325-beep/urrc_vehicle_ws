@@ -72,6 +72,15 @@ class OvertakeFusion(Node):
             'overtake_trigger_m': 17.50,
             'overtake_trigger_margin_m': 2.00,
             'overtake_front_clear_m': 12.00,
+
+            # Relative-speed / TTC based active overtaking.
+            'relative_speed_filter_alpha': 0.35,
+            'vehicle_track_timeout_sec': 0.40,
+            'overtake_ttc_trigger_sec': 2.20,
+            'overtake_ttc_urgent_sec': 1.20,
+            'follow_ttc_target_sec': 2.80,
+            'follow_min_gap_m': 2.00,
+            'follow_speed_margin_mps': 0.40,
             'overtake_side_clear_m': 0.82,
             'overtake_abort_side_m': 0.55,
             'rear_return_clear_m': 2.50,
@@ -139,6 +148,10 @@ class OvertakeFusion(Node):
         self.pass_side = 1.0
         self.front_clear_since = None
         self.last_overtake_end = -1e9
+
+        self.last_vehicle_distance = None
+        self.last_vehicle_stamp = 0.0
+        self.filtered_closing_speed = 0.0
 
         self.output_speed = 0.0
         self.output_steer = 0.0
@@ -216,6 +229,15 @@ class OvertakeFusion(Node):
         )
         self.front_object_detected_pub = self.create_publisher(
             Bool, '/race/front_vehicle_detected', 10
+        )
+        self.closing_speed_pub = self.create_publisher(
+            Float32, '/race/front_closing_speed_mps', 20
+        )
+        self.vehicle_ttc_pub = self.create_publisher(
+            Float32, '/race/front_vehicle_ttc_sec', 20
+        )
+        self.lead_speed_pub = self.create_publisher(
+            Float32, '/race/front_vehicle_estimated_speed_mps', 20
         )
         self.imu_yaw_pub = self.create_publisher(
             Float32, '/race/imu_yaw_rate_rad_s', 20
@@ -455,6 +477,119 @@ class OvertakeFusion(Node):
             return None
 
         return min(candidates, key=lambda item: item[0])
+
+    def update_vehicle_motion(
+        self,
+        vehicle_distance,
+        now,
+    ):
+        """Estimate closing speed, lead speed and TTC from distance history."""
+        timeout = float(
+            self.get_parameter(
+                'vehicle_track_timeout_sec'
+            ).value
+        )
+        alpha = float(
+            self.get_parameter(
+                'relative_speed_filter_alpha'
+            ).value
+        )
+
+        if not math.isfinite(vehicle_distance):
+            if now - self.last_vehicle_stamp > timeout:
+                self.last_vehicle_distance = None
+                self.filtered_closing_speed = 0.0
+            return 0.0, float('inf'), 0.0
+
+        raw_closing = 0.0
+
+        if (
+            self.last_vehicle_distance is not None
+            and self.last_vehicle_stamp > 0.0
+        ):
+            dt = now - self.last_vehicle_stamp
+            if 0.01 <= dt <= timeout:
+                raw_closing = (
+                    self.last_vehicle_distance
+                    - vehicle_distance
+                ) / dt
+
+        self.last_vehicle_distance = vehicle_distance
+        self.last_vehicle_stamp = now
+
+        raw_closing = float(np.clip(
+            raw_closing,
+            -20.0,
+            20.0,
+        ))
+
+        self.filtered_closing_speed = (
+            alpha * raw_closing
+            + (1.0 - alpha)
+            * self.filtered_closing_speed
+        )
+
+        closing = max(
+            0.0,
+            self.filtered_closing_speed,
+        )
+
+        if closing > 0.05:
+            ttc = vehicle_distance / closing
+        else:
+            ttc = float('inf')
+
+        estimated_lead_speed = max(
+            0.0,
+            self.output_speed
+            - self.filtered_closing_speed,
+        )
+
+        return (
+            closing,
+            ttc,
+            estimated_lead_speed,
+        )
+
+    def follow_speed_limit(
+        self,
+        vehicle_distance,
+        lead_speed,
+        vehicle_ttc,
+    ):
+        if not math.isfinite(vehicle_distance):
+            return float(
+                self.get_parameter('max_speed_mps').value
+            )
+
+        target_ttc = float(
+            self.get_parameter(
+                'follow_ttc_target_sec'
+            ).value
+        )
+        minimum_gap = float(
+            self.get_parameter(
+                'follow_min_gap_m'
+            ).value
+        )
+        margin = float(
+            self.get_parameter(
+                'follow_speed_margin_mps'
+            ).value
+        )
+
+        if (
+            vehicle_distance <= minimum_gap
+            or vehicle_ttc < target_ttc
+        ):
+            return max(
+                0.0,
+                lead_speed + margin,
+            )
+
+        return float(
+            self.get_parameter('max_speed_mps').value
+        )
 
     def pass_corridor_clearance(self, left):
         """Conservative free-space estimate for the intended pass side."""
@@ -915,6 +1050,31 @@ class OvertakeFusion(Node):
                 Float32(data=vehicle_distance)
             )
 
+        (
+            closing_speed,
+            vehicle_ttc,
+            lead_speed,
+        ) = self.update_vehicle_motion(
+            vehicle_distance,
+            now,
+        )
+
+        self.closing_speed_pub.publish(
+            Float32(data=float(closing_speed))
+        )
+        self.vehicle_ttc_pub.publish(
+            Float32(
+                data=(
+                    float(vehicle_ttc)
+                    if math.isfinite(vehicle_ttc)
+                    else -1.0
+                )
+            )
+        )
+        self.lead_speed_pub.publish(
+            Float32(data=float(lead_speed))
+        )
+
         left_corridor = self.pass_corridor_clearance(True)
         right_corridor = self.pass_corridor_clearance(False)
 
@@ -1027,9 +1187,35 @@ class OvertakeFusion(Node):
                 )
             )
 
+            ttc_trigger = float(
+                self.get_parameter(
+                    'overtake_ttc_trigger_sec'
+                ).value
+            )
+            ttc_urgent = float(
+                self.get_parameter(
+                    'overtake_ttc_urgent_sec'
+                ).value
+            )
+
+            approaching = (
+                closing_speed > 0.10
+                and vehicle_ttc < ttc_trigger
+            )
+            urgent = (
+                closing_speed > 0.10
+                and vehicle_ttc < ttc_urgent
+            )
+
             candidate = (
                 math.isfinite(vehicle_distance)
-                and vehicle_distance < trigger
+                and (
+                    approaching
+                    or (
+                        vehicle_distance < trigger
+                        and closing_speed > 0.25
+                    )
+                )
                 and max(left_corridor, right_corridor) > corridor_need
                 and abs(steer) < max_base
                 and base_speed > 0.2
@@ -1056,7 +1242,31 @@ class OvertakeFusion(Node):
                     self.set_state(OvertakeState.SHIFT_OUT)
             else:
                 self.detect_start = None
-                speed = min(speed, safe_limit)
+
+                follow_limit = self.follow_speed_limit(
+                    vehicle_distance,
+                    lead_speed,
+                    vehicle_ttc,
+                )
+
+                speed = min(
+                    speed,
+                    safe_limit,
+                    follow_limit,
+                )
+
+                if urgent and math.isfinite(vehicle_distance):
+                    mode = f'{mode}:TTC_URGENT_FOLLOW'
+                elif (
+                    math.isfinite(vehicle_distance)
+                    and follow_limit
+                    < float(
+                        self.get_parameter(
+                            'max_speed_mps'
+                        ).value
+                    )
+                ):
+                    mode = f'{mode}:FOLLOW_LEAD'
 
         elif self.state == OvertakeState.SHIFT_OUT:
             elapsed = now - self.state_start
