@@ -25,6 +25,12 @@ class Monitor(Node):
         self.red_ratio = None
         self.road_confidence = None
         self.overtake_state = 'UNKNOWN'
+        self.controller_mode = 'UNKNOWN'
+        self.boundary_confidence = None
+        self.imu_yaw_rate = None
+        self.imu_lateral_accel = None
+        self.imu_roll_deg = None
+        self.stability_factor = None
 
         self.odom_count = 0
         self.last_xy = None
@@ -41,7 +47,13 @@ class Monitor(Node):
         self.create_subscription(Float32, '/camera/red_ratio', self.on_red, 10)
         self.create_subscription(Float32, '/camera/road_confidence', self.on_conf, 10)
         self.create_subscription(String, '/race/overtake_state', self.on_state, 10)
-        self.create_subscription(Odometry, '/model/urrc_car/odometry', self.on_odom, 20)
+        self.create_subscription(String, '/race/controller_mode', self.on_mode, 10)
+        self.create_subscription(Float32, '/race/continuous_boundary_confidence', self.on_boundary, 10)
+        self.create_subscription(Float32, '/race/imu_yaw_rate_rad_s', self.on_imu_yaw, 20)
+        self.create_subscription(Float32, '/race/imu_lateral_accel_mps2', self.on_imu_lat, 20)
+        self.create_subscription(Float32, '/race/imu_roll_deg', self.on_imu_roll, 20)
+        self.create_subscription(Float32, '/race/stability_factor', self.on_stability, 20)
+        self.create_subscription(Odometry, '/model/urrc_car/odometry', self.on_odom, 50)
 
         self.done = False
         self.success = False
@@ -70,6 +82,24 @@ class Monitor(Node):
 
     def on_state(self, msg):
         self.overtake_state = msg.data
+
+    def on_mode(self, msg):
+        self.controller_mode = msg.data
+
+    def on_boundary(self, msg):
+        self.boundary_confidence = float(msg.data)
+
+    def on_imu_yaw(self, msg):
+        self.imu_yaw_rate = float(msg.data)
+
+    def on_imu_lat(self, msg):
+        self.imu_lateral_accel = float(msg.data)
+
+    def on_imu_roll(self, msg):
+        self.imu_roll_deg = float(msg.data)
+
+    def on_stability(self, msg):
+        self.stability_factor = float(msg.data)
 
     def on_odom(self, msg):
         self.odom_count += 1
@@ -103,7 +133,10 @@ class Monitor(Node):
                 f'distance={self.distance:.1f}m avg={avg:.2f}m/s '
                 f'max={self.max_speed:.2f}m/s max_r={self.max_distance_from_origin:.1f}m '
                 f'start={self.start_allowed} red={self.red_ratio} '
-                f'road_conf={self.road_confidence} overtake={self.overtake_state}',
+                f'road_conf={self.road_confidence} boundary={self.boundary_confidence} '
+                f'imu_yaw={self.imu_yaw_rate} imu_lat={self.imu_lateral_accel} '
+                f'imu_roll={self.imu_roll_deg} stability={self.stability_factor} '
+                f'mode={self.controller_mode} overtake={self.overtake_state}',
                 flush=True,
             )
             self.last_report = now
@@ -127,6 +160,12 @@ class Monitor(Node):
         print(f'camera_red_ratio={self.red_ratio}')
         print(f'camera_road_confidence={self.road_confidence}')
         print(f'overtake_state={self.overtake_state}')
+        print(f'controller_mode={self.controller_mode}')
+        print(f'boundary_confidence={self.boundary_confidence}')
+        print(f'imu_yaw_rate_rad_s={self.imu_yaw_rate}')
+        print(f'imu_lateral_accel_mps2={self.imu_lateral_accel}')
+        print(f'imu_roll_deg={self.imu_roll_deg}')
+        print(f'stability_factor={self.stability_factor}')
         print('=== END_CI_RACE_SUMMARY ===')
 
 
