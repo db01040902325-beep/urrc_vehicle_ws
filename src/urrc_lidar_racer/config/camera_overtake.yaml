@@ -23,20 +23,20 @@ overtake_fusion:
     camera_gain_deg: 5.5
     camera_min_confidence: 0.35
     camera_fallback_enable: true
-    camera_fallback_speed_mps: 1.60
+    camera_fallback_speed_mps: 2.50
     camera_fallback_gain_scale: 1.35
     max_steer_deg: 28.0
-    max_speed_mps: 6.30
+    max_speed_mps: 10.00
     raw_cmd_timeout_sec: 0.35
     scan_timeout_sec: 0.40
-    emergency_stop_m: 0.55
-    hard_ttc_sec: 0.18
+    emergency_stop_m: 0.70
+    hard_ttc_sec: 0.22
     reaction_time_sec: 0.20
-    brake_decel_mps2: 7.5
-    safety_margin_m: 0.35
-    overtake_trigger_m: 2.20
-    overtake_trigger_margin_m: 0.80
-    overtake_front_clear_m: 3.00
+    brake_decel_mps2: 10.0
+    safety_margin_m: 0.40
+    overtake_trigger_m: 8.00
+    overtake_trigger_margin_m: 1.00
+    overtake_front_clear_m: 8.00
     overtake_side_clear_m: 0.82
     overtake_abort_side_m: 0.55
     rear_return_clear_m: 1.20
@@ -54,9 +54,9 @@ overtake_fusion:
     overtake_cooldown_sec: 1.50
 
     # 최종 명령 평활화
-    final_accel_limit_mps2: 3.5
-    final_decel_limit_mps2: 7.5
-    final_steer_rate_deg_s: 150.0
+    final_accel_limit_mps2: 10.0
+    final_decel_limit_mps2: 10.0
+    final_steer_rate_deg_s: 110.0
     overtake_max_base_steer_deg: 8.0
     overtake_detect_hold_sec: 0.25
     shift_out_sec: 0.85
@@ -65,7 +65,7 @@ overtake_fusion:
     pass_lane_target: 0.30
     fallback_shift_bias_deg: 3.5
     fallback_return_bias_deg: 3.0
-    shift_speed_mps: 4.50
-    overtake_speed_mps: 6.20
-    return_speed_mps: 4.50
+    shift_speed_mps: 8.00
+    overtake_speed_mps: 10.00
+    return_speed_mps: 8.00
     start_gate_enable: true
