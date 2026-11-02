@@ -43,10 +43,16 @@ def generate_launch_description():
         'urrc_track_gazebo'
     )
 
-    run_world = os.path.join(
+    world_file = os.path.join(
+        track_share,
+        'worlds',
+        'monza_race.sdf'
+    )
+
+    traffic_lights = os.path.join(
         track_share,
         'scripts',
-        'run_world.py'
+        'traffic_lights_v10.py'
     )
 
     gui_config = os.path.join(
@@ -74,16 +80,28 @@ def generate_launch_description():
 
     partition = f'urrc_practice_{os.getuid()}'
 
-    # Latest urrc_2 Monza server. Current run_world.py owns the official
-    # v10.8 five-light sequence, so do not start a second light controller.
+    # Start the race world directly WITHOUT run_world.py so the official
+    # light sequence cannot begin before the vehicle camera is ready.
     gazebo_server = ExecuteProcess(
         cmd=[
+            'gz',
+            'sim',
+            '-r',
+            '-v',
+            '3',
+            '-s',
+            world_file,
+        ],
+        output='screen'
+    )
+
+    start_lights = ExecuteProcess(
+        cmd=[
             sys.executable,
-            run_world,
+            traffic_lights,
+            '--track',
             'monza',
-            '--server',
-            '--view',
-            'grid',
+            '--skip-camera-check',
         ],
         output='screen'
     )
@@ -193,6 +211,14 @@ exit 1
                     TimerAction(
                         period=0.2,
                         actions=[race]
+                    ),
+
+                    # Camera / perception nodes must be alive before the
+                    # five-light sequence begins. This removes WAIT_START
+                    # races caused by run_world.py starting lights too early.
+                    TimerAction(
+                        period=3.0,
+                        actions=[start_lights]
                     ),
                 ]
             )
