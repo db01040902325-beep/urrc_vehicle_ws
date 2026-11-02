@@ -661,6 +661,11 @@ class OvertakeFusion(Node):
                     'center_align_speed_mps'
                 ).value
             )
+        else:
+            # Inside the release deadband, stop continuously chasing the
+            # exact center. This prevents left-right hunting.
+            self.center_filtered_correction *= 0.70
+            correction = 0.0
 
         near_wall = float(
             self.get_parameter('center_near_wall_m').value
