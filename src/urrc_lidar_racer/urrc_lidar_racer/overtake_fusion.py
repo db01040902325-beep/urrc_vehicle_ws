@@ -394,7 +394,17 @@ class OvertakeFusion(Node):
         self.boundary_stamp = self.now_sec()
 
     def on_start_allowed(self, msg):
-        self.start_allowed = bool(msg.data)
+        # Start permission is a one-way latch for the current race.
+        # Once the camera has confirmed LIGHTS OUT, later stale/duplicate
+        # false messages must never put the vehicle back into WAIT_START.
+        if self.start_allowed:
+            return
+
+        if bool(msg.data):
+            self.start_allowed = True
+            self.get_logger().info(
+                'Start gate latched OPEN'
+            )
 
     @staticmethod
     def sector_values(scan, deg_min, deg_max):
