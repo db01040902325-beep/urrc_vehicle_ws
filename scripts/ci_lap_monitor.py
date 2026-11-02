@@ -44,6 +44,8 @@ class Monitor(Node):
         self.rear_vehicle_ttc = None
         self.left_blindspot = None
         self.right_blindspot = None
+        self.defense_active = None
+        self.defense_side = None
 
         self.odom_count = 0
         self.last_xy = None
@@ -79,6 +81,8 @@ class Monitor(Node):
         self.create_subscription(Float32, '/race/rear_vehicle_ttc_sec', self.on_rear_ttc, 20)
         self.create_subscription(Bool, '/race/left_blindspot', self.on_left_blindspot, 20)
         self.create_subscription(Bool, '/race/right_blindspot', self.on_right_blindspot, 20)
+        self.create_subscription(Bool, '/race/defense_active', self.on_defense_active, 20)
+        self.create_subscription(Float32, '/race/defense_side', self.on_defense_side, 20)
         self.create_subscription(Odometry, '/model/urrc_car/odometry', self.on_odom, 50)
 
         self.done = False
@@ -166,6 +170,12 @@ class Monitor(Node):
     def on_right_blindspot(self, msg):
         self.right_blindspot = bool(msg.data)
 
+    def on_defense_active(self, msg):
+        self.defense_active = bool(msg.data)
+
+    def on_defense_side(self, msg):
+        self.defense_side = float(msg.data)
+
     def on_odom(self, msg):
         self.odom_count += 1
         x = float(msg.pose.pose.position.x)
@@ -208,6 +218,7 @@ class Monitor(Node):
                 f'health={self.sensor_health} overtake_ok={self.overtake_allowed} '
                 f'rear_closing={self.rear_closing_speed} rear_ttc={self.rear_vehicle_ttc} '
                 f'blind_l={self.left_blindspot} blind_r={self.right_blindspot} '
+                f'defense={self.defense_active} defense_side={self.defense_side} '
                 f'mode={self.controller_mode} overtake={self.overtake_state}',
                 flush=True,
             )
@@ -251,6 +262,8 @@ class Monitor(Node):
         print(f'rear_vehicle_ttc_sec={self.rear_vehicle_ttc}')
         print(f'left_blindspot={self.left_blindspot}')
         print(f'right_blindspot={self.right_blindspot}')
+        print(f'defense_active={self.defense_active}')
+        print(f'defense_side={self.defense_side}')
         print('=== END_CI_RACE_SUMMARY ===')
 
 
