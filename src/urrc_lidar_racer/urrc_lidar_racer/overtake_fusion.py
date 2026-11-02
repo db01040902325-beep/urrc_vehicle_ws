@@ -55,6 +55,15 @@ class OvertakeFusion(Node):
             'fusion_camera_min_weight': 0.20,
             'sensor_degraded_confidence': 0.20,
             'sensor_degraded_speed_mps': 4.0,
+
+            # Sensor health / fail-safe.
+            'camera_timeout_sec': 0.50,
+            'boundary_timeout_sec': 0.35,
+            'rear_scan_timeout_sec': 0.35,
+            'camera_fail_speed_mps': 12.0,
+            'rear_lidar_fail_speed_mps': 10.0,
+            'multi_sensor_fail_speed_mps': 4.0,
+
             'camera_fallback_speed_mps': 3.00,
             'camera_fallback_gain_scale': 1.35,
 
@@ -137,7 +146,9 @@ class OvertakeFusion(Node):
 
         self.camera_offset = 0.0
         self.camera_confidence = 0.0
+        self.camera_stamp = 0.0
         self.boundary_confidence = 0.0
+        self.boundary_stamp = 0.0
         self.start_allowed = not bool(
             self.get_parameter('start_gate_enable').value
         )
@@ -257,6 +268,12 @@ class OvertakeFusion(Node):
         self.camera_weight_pub = self.create_publisher(
             Float32, '/race/camera_fusion_weight', 20
         )
+        self.sensor_health_pub = self.create_publisher(
+            String, '/race/sensor_health', 20
+        )
+        self.overtake_allowed_pub = self.create_publisher(
+            Bool, '/race/overtake_allowed', 20
+        )
 
         self.create_timer(0.02, self.control_loop)
 
@@ -310,14 +327,17 @@ class OvertakeFusion(Node):
 
     def on_camera_offset(self, msg):
         self.camera_offset = float(np.clip(msg.data, -1.0, 1.0))
+        self.camera_stamp = self.now_sec()
 
     def on_camera_confidence(self, msg):
         self.camera_confidence = float(np.clip(msg.data, 0.0, 1.0))
+        self.camera_stamp = self.now_sec()
 
     def on_boundary_confidence(self, msg):
         self.boundary_confidence = float(
             np.clip(msg.data, 0.0, 1.0)
         )
+        self.boundary_stamp = self.now_sec()
 
     def on_start_allowed(self, msg):
         self.start_allowed = bool(msg.data)
@@ -833,9 +853,127 @@ class OvertakeFusion(Node):
             steer, -self.max_steer_rad(), self.max_steer_rad()
         ))
 
+    def sensor_health(self, now):
+        camera_timeout = float(
+            self.get_parameter('camera_timeout_sec').value
+        )
+        boundary_timeout = float(
+            self.get_parameter('boundary_timeout_sec').value
+        )
+        rear_timeout = float(
+            self.get_parameter('rear_scan_timeout_sec').value
+        )
+        imu_timeout = float(
+            self.get_parameter('imu_timeout_sec').value
+        )
+
+        camera_ok = (
+            self.camera_stamp > 0.0
+            and now - self.camera_stamp <= camera_timeout
+        )
+        boundary_ok = (
+            self.boundary_stamp > 0.0
+            and now - self.boundary_stamp <= boundary_timeout
+        )
+        rear_ok = (
+            self.rear_scan_stamp > 0.0
+            and now - self.rear_scan_stamp <= rear_timeout
+        )
+        imu_ok = (
+            self.imu_stamp > 0.0
+            and now - self.imu_stamp <= imu_timeout
+        )
+
+        failed = []
+        if not camera_ok:
+            failed.append('CAMERA')
+        if not boundary_ok:
+            failed.append('BOUNDARY')
+        if not rear_ok:
+            failed.append('REAR_LIDAR')
+        if not imu_ok:
+            failed.append('IMU')
+
+        health = 'OK' if not failed else 'DEGRADED:' + '+'.join(failed)
+
+        return {
+            'camera_ok': camera_ok,
+            'boundary_ok': boundary_ok,
+            'rear_ok': rear_ok,
+            'imu_ok': imu_ok,
+            'health': health,
+        }
+
+    def fail_safe_speed_limit(self, health):
+        limits = [
+            float(self.get_parameter('max_speed_mps').value)
+        ]
+
+        if not health['camera_ok']:
+            limits.append(
+                float(
+                    self.get_parameter(
+                        'camera_fail_speed_mps'
+                    ).value
+                )
+            )
+
+        if not health['rear_ok']:
+            limits.append(
+                float(
+                    self.get_parameter(
+                        'rear_lidar_fail_speed_mps'
+                    ).value
+                )
+            )
+
+        failed_count = sum(
+            1
+            for key in (
+                'camera_ok',
+                'boundary_ok',
+                'rear_ok',
+                'imu_ok',
+            )
+            if not health[key]
+        )
+
+        if failed_count >= 2:
+            limits.append(
+                float(
+                    self.get_parameter(
+                        'multi_sensor_fail_speed_mps'
+                    ).value
+                )
+            )
+
+        return min(limits)
+
     def fusion_weights(self):
-        lidar_weight = float(
-            np.clip(self.boundary_confidence, 0.0, 1.0)
+        now = self.now_sec()
+        boundary_fresh = (
+            self.boundary_stamp > 0.0
+            and now - self.boundary_stamp
+            <= float(
+                self.get_parameter(
+                    'boundary_timeout_sec'
+                ).value
+            )
+        )
+        camera_fresh = (
+            self.camera_stamp > 0.0
+            and now - self.camera_stamp
+            <= float(
+                self.get_parameter(
+                    'camera_timeout_sec'
+                ).value
+            )
+        )
+
+        lidar_weight = (
+            float(np.clip(self.boundary_confidence, 0.0, 1.0))
+            if boundary_fresh
+            else 0.0
         )
 
         minimum_camera_weight = float(
@@ -849,17 +987,32 @@ class OvertakeFusion(Node):
             minimum_camera_weight,
             1.0 - lidar_weight,
         )
-        camera_weight = float(
-            np.clip(
-                self.camera_confidence * camera_scale,
-                0.0,
-                1.0,
+        camera_weight = (
+            float(
+                np.clip(
+                    self.camera_confidence * camera_scale,
+                    0.0,
+                    1.0,
+                )
             )
+            if camera_fresh
+            else 0.0
         )
 
         return lidar_weight, camera_weight
 
     def camera_correction(self, target_offset=0.0, scale=1.0):
+        if (
+            self.camera_stamp <= 0.0
+            or self.now_sec() - self.camera_stamp
+            > float(
+                self.get_parameter(
+                    'camera_timeout_sec'
+                ).value
+            )
+        ):
+            return None
+
         minimum = float(
             self.get_parameter('camera_min_confidence').value
         )
@@ -1020,6 +1173,28 @@ class OvertakeFusion(Node):
             and not self.start_allowed
         ):
             self.publish_stop('WAIT_START')
+            return
+
+        health = self.sensor_health(now)
+        self.sensor_health_pub.publish(
+            String(data=health['health'])
+        )
+
+        overtake_allowed = bool(
+            health['rear_ok']
+            and health['imu_ok']
+            and health['boundary_ok']
+        )
+        self.overtake_allowed_pub.publish(
+            Bool(data=overtake_allowed)
+        )
+
+        # No reliable path source: stop instead of guessing.
+        if (
+            not health['boundary_ok']
+            and not health['camera_ok']
+        ):
+            self.publish_stop('PATH_SENSORS_LOST')
             return
 
         base_speed = max(0.0, float(self.raw_cmd.linear.x))
@@ -1220,6 +1395,7 @@ class OvertakeFusion(Node):
                 and abs(steer) < max_base
                 and base_speed > 0.2
                 and cooldown_ok
+                and overtake_allowed
             )
 
             if candidate:
@@ -1319,6 +1495,24 @@ class OvertakeFusion(Node):
 
         elif self.state == OvertakeState.PASS:
             elapsed = now - self.state_start
+
+            if not health['rear_ok']:
+                speed = min(
+                    float(
+                        self.get_parameter(
+                            'rear_lidar_fail_speed_mps'
+                        ).value
+                    ),
+                    max(1.0, base_speed),
+                )
+                mode = 'REAR_LIDAR_FAIL_HOLD_PASS'
+                self.publish_command(
+                    speed,
+                    steer,
+                    mode,
+                )
+                return
+
             speed = float(
                 self.get_parameter('overtake_speed_mps').value
             )
@@ -1448,6 +1642,13 @@ class OvertakeFusion(Node):
             if elapsed >= duration:
                 self.last_overtake_end = now
                 self.set_state(OvertakeState.CRUISE)
+
+        health_speed_limit = self.fail_safe_speed_limit(
+            health
+        )
+        if speed > health_speed_limit:
+            speed = health_speed_limit
+            mode = f'{mode}:FAILSAFE_LIMIT'
 
         degraded_confidence = float(
             self.get_parameter(
