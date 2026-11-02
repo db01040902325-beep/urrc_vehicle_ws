@@ -35,6 +35,9 @@ class Monitor(Node):
         self.curve_speed_limit = None
         self.lidar_weight = None
         self.camera_weight = None
+        self.front_closing_speed = None
+        self.front_vehicle_ttc = None
+        self.front_vehicle_speed = None
 
         self.odom_count = 0
         self.last_xy = None
@@ -61,6 +64,9 @@ class Monitor(Node):
         self.create_subscription(Float32, '/race/curve_speed_limit_mps', self.on_curve_speed, 20)
         self.create_subscription(Float32, '/race/lidar_fusion_weight', self.on_lidar_weight, 20)
         self.create_subscription(Float32, '/race/camera_fusion_weight', self.on_camera_weight, 20)
+        self.create_subscription(Float32, '/race/front_closing_speed_mps', self.on_closing_speed, 20)
+        self.create_subscription(Float32, '/race/front_vehicle_ttc_sec', self.on_vehicle_ttc, 20)
+        self.create_subscription(Float32, '/race/front_vehicle_estimated_speed_mps', self.on_vehicle_speed, 20)
         self.create_subscription(Odometry, '/model/urrc_car/odometry', self.on_odom, 50)
 
         self.done = False
@@ -121,6 +127,15 @@ class Monitor(Node):
     def on_camera_weight(self, msg):
         self.camera_weight = float(msg.data)
 
+    def on_closing_speed(self, msg):
+        self.front_closing_speed = float(msg.data)
+
+    def on_vehicle_ttc(self, msg):
+        self.front_vehicle_ttc = float(msg.data)
+
+    def on_vehicle_speed(self, msg):
+        self.front_vehicle_speed = float(msg.data)
+
     def on_odom(self, msg):
         self.odom_count += 1
         x = float(msg.pose.pose.position.x)
@@ -158,6 +173,8 @@ class Monitor(Node):
                 f'imu_roll={self.imu_roll_deg} stability={self.stability_factor} '
                 f'curve={self.curve_prediction_deg} curve_limit={self.curve_speed_limit} '
                 f'lidar_w={self.lidar_weight} camera_w={self.camera_weight} '
+                f'closing={self.front_closing_speed} ttc={self.front_vehicle_ttc} '
+                f'lead_v={self.front_vehicle_speed} '
                 f'mode={self.controller_mode} overtake={self.overtake_state}',
                 flush=True,
             )
@@ -192,6 +209,9 @@ class Monitor(Node):
         print(f'curve_speed_limit_mps={self.curve_speed_limit}')
         print(f'lidar_fusion_weight={self.lidar_weight}')
         print(f'camera_fusion_weight={self.camera_weight}')
+        print(f'front_closing_speed_mps={self.front_closing_speed}')
+        print(f'front_vehicle_ttc_sec={self.front_vehicle_ttc}')
+        print(f'front_vehicle_estimated_speed_mps={self.front_vehicle_speed}')
         print('=== END_CI_RACE_SUMMARY ===')
 
 
