@@ -60,6 +60,12 @@ class LidarRacer(Node):
             10
         )
 
+        self.boundary_mode_pub = self.create_publisher(
+            Float32,
+            '/race/continuous_boundary_confidence',
+            10
+        )
+
         # RViz Marker
         self.marker_pub = self.create_publisher(
             MarkerArray,
@@ -125,6 +131,19 @@ class LidarRacer(Node):
             'detection_max_abs_y': 1.50,
             'side_deadband_y': 0.15,
 
+            # Continuous wall / guardrail tracking for the new Monza map.
+            'continuous_boundary_enable': True,
+            'boundary_bin_size_m': 0.65,
+            'boundary_min_points_per_bin': 2,
+            'boundary_min_abs_y_m': 0.25,
+            'boundary_max_abs_y_m': 3.50,
+            'boundary_min_x_m': 0.35,
+            'boundary_max_x_m': 20.0,
+            'boundary_pair_min_width_m': 0.90,
+            'boundary_pair_max_width_m': 4.50,
+            'boundary_near_window_m': 2.00,
+            'boundary_target_ema_alpha': 0.45,
+
             'loss_hold_frames': 2,
             'loss_slow_frames': 5,
             'loss_hold_speed': 3.00,
@@ -151,6 +170,8 @@ class LidarRacer(Node):
         # Steering smoothing
         self.filtered_steer_deg = 0.0
         self.last_speed = 0.0
+        self.filtered_target_y = 0.0
+        self.have_filtered_target = False
 
         # EMA: 클수록 새 조향값을 빠르게 반영
         self.steer_ema_alpha = float(self.steer_ema_alpha)
@@ -225,24 +246,46 @@ class LidarRacer(Node):
 
     def scan_callback(self, msg):
 
-        clusters = self.extract_clusters(msg)
+        continuous_left = []
+        continuous_right = []
+        boundary_confidence = 0.0
 
-        left = []
-        right = []
+        if bool(self.continuous_boundary_enable):
+            (
+                continuous_left,
+                continuous_right,
+                boundary_confidence,
+            ) = self.extract_continuous_boundaries(msg)
 
-        for x, y, size in clusters:
+        # Prefer the new continuous wall / guardrail tracker when it has
+        # sufficient evidence. Keep the original compact-cluster detector as
+        # a fallback for cone-style practice layouts.
+        if (
+            len(continuous_left) + len(continuous_right) >= 3
+            and boundary_confidence >= 0.20
+        ):
+            left = continuous_left
+            right = continuous_right
+        else:
+            clusters = self.extract_clusters(msg)
+            left = []
+            right = []
 
-            if x < self.detection_min_x or x > self.detection_max_x:
-                continue
+            for x, y, size in clusters:
+                if x < self.detection_min_x or x > self.detection_max_x:
+                    continue
 
-            if abs(y) > self.detection_max_abs_y:
-                continue
+                if abs(y) > self.detection_max_abs_y:
+                    continue
 
-            if y > self.side_deadband_y:
-                left.append((x, y))
+                if y > self.side_deadband_y:
+                    left.append((x, y))
+                elif y < -self.side_deadband_y:
+                    right.append((x, y))
 
-            elif y < -self.side_deadband_y:
-                right.append((x, y))
+        self.boundary_mode_pub.publish(
+            Float32(data=float(boundary_confidence))
+        )
 
         # ==========================================
         # Adaptive Lookahead
@@ -302,6 +345,19 @@ class LidarRacer(Node):
         self.miss_count = 0
 
         target_x, target_y = target
+
+        # Target lateral low-pass filtering prevents wall-scan jitter from
+        # turning into high-speed steering oscillation.
+        alpha = float(self.boundary_target_ema_alpha)
+        if not self.have_filtered_target:
+            self.filtered_target_y = float(target_y)
+            self.have_filtered_target = True
+        else:
+            self.filtered_target_y = (
+                alpha * float(target_y)
+                + (1.0 - alpha) * self.filtered_target_y
+            )
+        target_y = self.filtered_target_y
 
         # Pure Pursuit
         ld2 = target_x * target_x + target_y * target_y
@@ -519,6 +575,7 @@ class LidarRacer(Node):
             speed = 0.0
             steer = 0.0
             self.filtered_steer_deg = 0.0
+            self.have_filtered_target = False
 
         delta_gazebo = math.radians(-steer)
 
@@ -750,6 +807,204 @@ class LidarRacer(Node):
         )
 
     # =====================================================
+    # Continuous wall / guardrail tracking
+    # =====================================================
+
+    def extract_continuous_boundaries(self, msg):
+        """Extract left/right continuous track boundaries from raw LiDAR.
+
+        The new Monza uses long collision meshes for the inner and outer
+        walls. Points are grouped by forward-distance bins. For each bin,
+        an outer-side percentile is used so compact cars and small objects
+        near the lane center do not replace the wall estimate.
+        """
+        bin_size = max(0.25, float(self.boundary_bin_size_m))
+        min_points = max(1, int(self.boundary_min_points_per_bin))
+        min_abs_y = float(self.boundary_min_abs_y_m)
+        max_abs_y = float(self.boundary_max_abs_y_m)
+        min_x = float(self.boundary_min_x_m)
+        max_x = min(
+            float(self.boundary_max_x_m),
+            float(self.lidar_max_use_range),
+        )
+
+        left_bins = {}
+        right_bins = {}
+        valid_points = 0
+
+        for i, r in enumerate(msg.ranges):
+            if not math.isfinite(r):
+                continue
+            if r < msg.range_min or r > min(msg.range_max, self.lidar_max_use_range):
+                continue
+
+            angle = msg.angle_min + i * msg.angle_increment
+            x = r * math.cos(angle)
+            y = r * math.sin(angle)
+
+            if x < min_x or x > max_x:
+                continue
+            if abs(y) < min_abs_y or abs(y) > max_abs_y:
+                continue
+
+            key = int(x / bin_size)
+            valid_points += 1
+
+            if y > 0.0:
+                left_bins.setdefault(key, []).append((x, y))
+            else:
+                right_bins.setdefault(key, []).append((x, y))
+
+        def summarize(bins, left_side):
+            output = []
+            for key in sorted(bins):
+                points = bins[key]
+                if len(points) < min_points:
+                    continue
+
+                xs = [p[0] for p in points]
+                ys = [p[1] for p in points]
+
+                # On the left choose a high lateral percentile; on the right
+                # choose a low percentile. This follows the outer wall rather
+                # than a car located closer to the lane center.
+                percentile = 72.0 if left_side else 28.0
+                boundary_y = self.percentile(ys, percentile)
+                boundary_x = self.percentile(xs, 50.0)
+
+                output.append((
+                    float(boundary_x),
+                    float(boundary_y),
+                ))
+            return output
+
+        left = summarize(left_bins, True)
+        right = summarize(right_bins, False)
+
+        occupied_bins = len(left) + len(right)
+        expected_bins = max(
+            1,
+            int((max_x - min_x) / bin_size),
+        )
+        confidence = min(
+            1.0,
+            occupied_bins / max(4.0, 0.65 * expected_bins),
+        )
+
+        if valid_points < 8:
+            confidence *= valid_points / 8.0
+
+        return left, right, confidence
+
+    @staticmethod
+    def percentile(values, percentile):
+        if not values:
+            return 0.0
+
+        ordered = sorted(float(v) for v in values)
+        if len(ordered) == 1:
+            return ordered[0]
+
+        rank = (
+            max(0.0, min(100.0, float(percentile)))
+            / 100.0
+            * (len(ordered) - 1)
+        )
+        lo = int(math.floor(rank))
+        hi = int(math.ceil(rank))
+        if lo == hi:
+            return ordered[lo]
+
+        t = rank - lo
+        return ordered[lo] * (1.0 - t) + ordered[hi] * t
+
+    def boundary_near_distance(self, points, target_x):
+        if not points:
+            return None
+
+        window = max(0.3, float(self.boundary_near_window_m))
+        candidates = [
+            p for p in points
+            if abs(p[0] - target_x) <= window
+        ]
+
+        if not candidates:
+            candidates = sorted(
+                points,
+                key=lambda p: abs(p[0] - target_x),
+            )[:2]
+
+        if not candidates:
+            return None
+
+        weights = [
+            1.0 / (0.20 + abs(p[0] - target_x))
+            for p in candidates
+        ]
+        total = sum(weights)
+        if total <= 0.0:
+            return candidates[0]
+
+        x = sum(
+            p[0] * w
+            for p, w in zip(candidates, weights)
+        ) / total
+        y = sum(
+            p[1] * w
+            for p, w in zip(candidates, weights)
+        ) / total
+
+        return float(x), float(y)
+
+    def center_from_boundaries(
+        self,
+        left,
+        right,
+        target_x,
+    ):
+        lp = self.boundary_near_distance(left, target_x)
+        rp = self.boundary_near_distance(right, target_x)
+
+        min_width = float(self.boundary_pair_min_width_m)
+        max_width = float(self.boundary_pair_max_width_m)
+
+        if lp is not None and rp is not None:
+            width = lp[1] - rp[1]
+
+            if min_width <= width <= max_width:
+                return (
+                    0.5 * (lp[0] + rp[0]),
+                    0.5 * (lp[1] + rp[1]),
+                )
+
+            # If one wall is temporarily contaminated by another object,
+            # trust the side whose absolute lateral position is more
+            # consistent with a track boundary.
+            if abs(lp[1]) >= abs(rp[1]):
+                return (
+                    lp[0],
+                    lp[1] - self.track_width / 2.0,
+                )
+            return (
+                rp[0],
+                rp[1] + self.track_width / 2.0,
+            )
+
+        if lp is not None:
+            return (
+                lp[0],
+                lp[1] - self.track_width / 2.0,
+            )
+
+        if rp is not None:
+            return (
+                rp[0],
+                rp[1] + self.track_width / 2.0,
+            )
+
+        return None
+
+    # =====================================================
     # LiDAR clustering
     # =====================================================
 
@@ -929,76 +1184,23 @@ class LidarRacer(Node):
         left,
         right
     ):
-        # 약 3m 앞의 트랙 중앙점을 찾음
-        preview_distance = self.preview_distance
-        candidates = []
+        target = self.center_from_boundaries(
+            left,
+            right,
+            float(self.preview_distance),
+        )
 
-        # 좌우 라바콘 쌍
-        for lx, ly in left:
-            for rx, ry in right:
+        if target is None:
+            return None
 
-                width = ly - ry
+        if not (
+            self.preview_min_x
+            <= target[0]
+            <= self.preview_max_x
+        ):
+            return None
 
-                if width < 0.60 or width > 2.20:
-                    continue
-
-                # 서로 너무 앞뒤로 떨어진 라바콘은
-                # 같은 횡단면의 쌍으로 사용하지 않음
-                if abs(lx - rx) > 0.80:
-                    continue
-
-                cx = (lx + rx) * 0.5
-                cy = (ly + ry) * 0.5
-
-                if self.preview_min_x <= cx <= self.preview_max_x:
-                    candidates.append(
-                        (cx, cy)
-                    )
-
-        if candidates:
-            return min(
-                candidates,
-                key=lambda p:
-                abs(p[0] - preview_distance)
-            )
-
-        # 왼쪽 경계만 보이는 경우
-        far_left = [
-            p for p in left
-            if self.preview_min_x <= p[0] <= self.preview_max_x
-        ]
-
-        if far_left:
-            lx, ly = min(
-                far_left,
-                key=lambda p:
-                abs(p[0] - preview_distance)
-            )
-
-            return (
-                lx,
-                ly - self.track_width / 2.0
-            )
-
-        # 오른쪽 경계만 보이는 경우
-        far_right = [
-            p for p in right
-            if self.preview_min_x <= p[0] <= self.preview_max_x
-        ]
-
-        if far_right:
-            rx, ry = min(
-                far_right,
-                key=lambda p:
-                abs(p[0] - preview_distance)
-            )
-
-            return (
-                rx,
-                ry + self.track_width / 2.0
-            )
-
-        return None
+        return target
 
 
     def find_center(
@@ -1006,101 +1208,11 @@ class LidarRacer(Node):
         left,
         right
     ):
-
-        best = None
-        best_cost = float('inf')
-
-        for lx, ly in left:
-
-            for rx, ry in right:
-
-                width = (
-                    ly - ry
-                )
-
-                if (
-                    width < 0.60
-                    or width > 2.20
-                ):
-                    continue
-
-                center_x = (
-                    lx + rx
-                ) * 0.5
-
-                center_y = (
-                    ly + ry
-                ) * 0.5
-
-                longitudinal_difference = abs(
-                    lx - rx
-                )
-
-                cost = (
-                    2.0
-                    * abs(
-                        width
-                        - self.track_width
-                    )
-                    + longitudinal_difference
-                    + 0.4
-                    * abs(
-                        center_x
-                        - self.lookahead
-                    )
-                )
-
-                if cost < best_cost:
-
-                    best_cost = cost
-
-                    best = (
-                        center_x,
-                        center_y
-                    )
-
-        if best is not None:
-            return best
-
-        # 한쪽만 보이는 경우
-
-        if left:
-
-            lx, ly = min(
-                left,
-                key=lambda p:
-                abs(
-                    p[0]
-                    - self.lookahead
-                )
-            )
-
-            return (
-                lx,
-                ly
-                - self.track_width
-                / 2.0
-            )
-
-        if right:
-
-            rx, ry = min(
-                right,
-                key=lambda p:
-                abs(
-                    p[0]
-                    - self.lookahead
-                )
-            )
-
-            return (
-                rx,
-                ry
-                + self.track_width
-                / 2.0
-            )
-
-        return None
+        return self.center_from_boundaries(
+            left,
+            right,
+            float(self.lookahead),
+        )
 
     # =====================================================
     # Front safety
