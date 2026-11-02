@@ -5,7 +5,7 @@ camera_perception:
 
     # 5등 신호등: 빨간색 면적이 아니라 실제 램프 개수로 판단
     start_gate_enable: true
-    start_full_on_min_count: 4
+    start_full_on_min_count: 5
     start_off_max_count: 1
     start_seen_frames: 3
     start_off_frames: 4
