@@ -46,7 +46,7 @@ class OvertakeFusion(Node):
             'imu_min_speed_factor': 0.35,
             'imu_steer_damping': 0.70,
 
-            'camera_gain_deg': 24.0,
+            'camera_gain_deg': 12.0,
             'camera_min_confidence': 0.35,
             'camera_fallback_enable': True,
 
@@ -55,39 +55,40 @@ class OvertakeFusion(Node):
             'fusion_lidar_min_confidence': 0.25,
             'fusion_camera_min_weight': 0.20,
             'sensor_degraded_confidence': 0.20,
-            'sensor_degraded_speed_mps': 6.0,
+            'sensor_degraded_speed_mps': 4.0,
 
             # Sensor health / fail-safe.
             'camera_timeout_sec': 0.50,
             'boundary_timeout_sec': 0.35,
             'rear_scan_timeout_sec': 0.35,
-            'camera_fail_speed_mps': 18.0,
-            'rear_lidar_fail_speed_mps': 15.0,
-            'multi_sensor_fail_speed_mps': 6.0,
+            'camera_fail_speed_mps': 12.0,
+            'rear_lidar_fail_speed_mps': 10.0,
+            'multi_sensor_fail_speed_mps': 4.0,
 
-            'camera_fallback_speed_mps': 4.50,
+            'camera_fallback_speed_mps': 3.00,
             'camera_fallback_gain_scale': 1.45,
 
             # LiDAR + camera lane-centering. Keep the car midway between
             # both guardrails before allowing full race speed.
             'center_align_enable': True,
-            'center_wall_angle_min_deg': 55.0,
+            'center_wall_angle_min_deg': 40.0,
             'center_wall_angle_max_deg': 88.0,
-            'center_wall_percentile': 30.0,
+            'center_wall_percentile': 35.0,
             'center_wall_min_m': 0.25,
             'center_wall_max_m': 4.50,
-            'center_error_scale_m': 0.65,
-            'center_wall_gain_deg': 32.0,
-            'center_camera_gain_deg': 12.0,
-            'center_align_engage_error_m': 0.12,
-            'center_align_release_error_m': 0.05,
-            'center_align_speed_mps': 7.0,
-            'center_near_wall_m': 0.48,
-            'center_near_wall_speed_mps': 3.0,
-            'center_near_wall_steer_deg': 35.0,
+            'center_error_scale_m': 0.80,
+            'center_wall_gain_deg': 18.0,
+            'center_camera_gain_deg': 6.0,
+            'center_align_engage_error_m': 0.18,
+            'center_align_release_error_m': 0.08,
+            'center_align_speed_mps': 4.0,
+            'center_near_wall_m': 0.55,
+            'center_near_wall_speed_mps': 2.0,
+            'center_near_wall_steer_deg': 24.0,
+            'center_steer_ema_alpha': 0.22,
 
             'max_steer_deg': 35.0,
-            'max_speed_mps': 22.50,
+            'max_speed_mps': 15.00,
             'raw_cmd_timeout_sec': 0.35,
             'scan_timeout_sec': 0.25,
 
@@ -101,9 +102,9 @@ class OvertakeFusion(Node):
             'brake_decel_mps2': 10.0,
             'safety_margin_m': 0.50,
 
-            'overtake_trigger_m': 26.25,
+            'overtake_trigger_m': 17.50,
             'overtake_trigger_margin_m': 2.00,
-            'overtake_front_clear_m': 18.00,
+            'overtake_front_clear_m': 12.00,
 
             # Relative-speed / TTC based active overtaking.
             'relative_speed_filter_alpha': 0.35,
@@ -134,7 +135,7 @@ class OvertakeFusion(Node):
             'defense_lane_target': 0.12,
             'defense_max_sec': 1.00,
             'defense_cooldown_sec': 2.00,
-            'defense_speed_mps': 18.0,
+            'defense_speed_mps': 12.0,
             'defense_front_clear_m': 8.0,
             'defense_side_clear_m': 1.00,
             'defense_max_base_steer_deg': 7.5,
@@ -155,7 +156,7 @@ class OvertakeFusion(Node):
             # Final actuator smoothing.
             'final_accel_limit_mps2': 10.0,
             'final_decel_limit_mps2': 10.0,
-            'final_steer_rate_deg_s': 130.0,
+            'final_steer_rate_deg_s': 75.0,
 
             'overtake_max_base_steer_deg': 10.0,
             'overtake_detect_hold_sec': 0.25,
@@ -168,9 +169,9 @@ class OvertakeFusion(Node):
             'fallback_shift_bias_deg': 3.5,
             'fallback_return_bias_deg': 3.0,
 
-            'shift_speed_mps': 15.00,
-            'overtake_speed_mps': 22.50,
-            'return_speed_mps': 15.00,
+            'shift_speed_mps': 10.00,
+            'overtake_speed_mps': 15.00,
+            'return_speed_mps': 10.00,
 
             'start_gate_enable': True,
         }
@@ -219,6 +220,7 @@ class OvertakeFusion(Node):
         self.front_emergency_count = 0
         self.center_align_active = False
         self.center_error_m = 0.0
+        self.center_filtered_correction = 0.0
 
         self.output_speed = 0.0
         self.output_steer = 0.0
@@ -548,6 +550,7 @@ class OvertakeFusion(Node):
         if measurement is None:
             self.center_align_active = False
             self.center_error_m = 0.0
+            self.center_filtered_correction *= 0.85
             self.center_error_pub.publish(Float32(data=0.0))
             self.left_wall_pub.publish(Float32(data=-1.0))
             self.right_wall_pub.publish(Float32(data=-1.0))
@@ -605,7 +608,7 @@ class OvertakeFusion(Node):
                 ).value
             )
         )
-        wall_correction = -wall_gain * normalized
+        wall_correction = wall_gain * normalized
 
         # Camera remains an independent second opinion. This does not use
         # the normal confidence fusion weight because centering must remain
@@ -637,9 +640,19 @@ class OvertakeFusion(Node):
         # LiDAR dominates actual wall clearance; camera damps perspective
         # errors and keeps the road center in view.
         correction = (
-            0.78 * wall_correction
-            + 0.22 * camera_correction
+            0.88 * wall_correction
+            + 0.12 * camera_correction
         )
+
+        alpha = float(
+            self.get_parameter('center_steer_ema_alpha').value
+        )
+        alpha = float(np.clip(alpha, 0.05, 1.0))
+        self.center_filtered_correction = (
+            alpha * correction
+            + (1.0 - alpha) * self.center_filtered_correction
+        )
+        correction = self.center_filtered_correction
 
         speed_limit = float('inf')
         if self.center_align_active:
@@ -674,10 +687,13 @@ class OvertakeFusion(Node):
             # Too close to left wall -> steer right. Too close to right wall
             # -> steer left, following the established steering convention.
             if left_distance < right_distance:
-                correction = abs(emergency_steer)
-            else:
+                # Left wall is closer -> steer right.
                 correction = -abs(emergency_steer)
+            else:
+                # Right wall is closer -> steer left.
+                correction = abs(emergency_steer)
 
+            self.center_filtered_correction = correction
             self.center_align_active = True
 
         self.center_active_pub.publish(
@@ -1961,9 +1977,13 @@ class OvertakeFusion(Node):
         mode = self.state.name
 
         if self.state == OvertakeState.CRUISE:
-            correction = self.camera_correction()
-            if correction is not None:
-                steer += correction
+            # When wall centering is active, do not add the normal camera
+            # correction a second time. The center controller already blends
+            # LiDAR wall distance and camera road-center information.
+            if not center_active:
+                correction = self.camera_correction()
+                if correction is not None:
+                    steer += correction
 
             steer += center_correction
             steer = float(np.clip(
