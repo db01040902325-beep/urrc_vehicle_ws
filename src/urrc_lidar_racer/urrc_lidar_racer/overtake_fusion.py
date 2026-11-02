@@ -1584,7 +1584,6 @@ class OvertakeFusion(Node):
             and fallback_enabled
             and base_speed <= 0.05
             and self.camera_confidence >= minimum_conf
-            and front > self.dynamic_stop_distance(fallback_speed)
         ):
             correction = self.camera_correction(
                 0.0,
