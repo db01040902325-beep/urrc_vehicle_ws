@@ -102,22 +102,22 @@ class LidarRacer(Node):
         defaults = {
             'wheelbase': 0.330,
             'track_width': 1.50,
-            'max_steer_deg': 28.0,
+            'max_steer_deg': 35.0,
 
-            'steer_ema_alpha': 0.30,
-            'max_steer_step_deg': 3.0,
+            'steer_ema_alpha': 0.45,
+            'max_steer_step_deg': 5.0,
 
-            'lookahead_straight': 9.00,
-            'lookahead_medium': 6.00,
-            'lookahead_sharp': 3.50,
-            'lookahead_medium_threshold_deg': 8.0,
-            'lookahead_sharp_threshold_deg': 18.0,
+            'lookahead_straight': 10.50,
+            'lookahead_medium': 6.50,
+            'lookahead_sharp': 3.00,
+            'lookahead_medium_threshold_deg': 6.0,
+            'lookahead_sharp_threshold_deg': 14.0,
 
-            'speed_straight': 15.00,
-            'speed_curve_1': 10.00,
-            'speed_curve_2': 8.00,
-            'speed_curve_3': 6.00,
-            'speed_sharp': 4.50,
+            'speed_straight': 22.50,
+            'speed_curve_1': 15.00,
+            'speed_curve_2': 12.00,
+            'speed_curve_3': 9.00,
+            'speed_sharp': 6.75,
 
             'speed_threshold_1_deg': 2.0,
             'speed_threshold_2_deg': 5.0,
@@ -125,30 +125,30 @@ class LidarRacer(Node):
             'speed_threshold_4_deg': 18.0,
 
             'lateral_accel_limit_mps2': 18.0,
-            'high_speed_steer_soft_limit_deg': 8.0,
-            'high_speed_steer_threshold_mps': 10.0,
+            'high_speed_steer_soft_limit_deg': 10.0,
+            'high_speed_steer_threshold_mps': 12.0,
 
-            'preview_distance': 12.0,
+            'preview_distance': 16.0,
             'preview_min_x': 3.00,
-            'preview_max_x': 18.00,
-            'preview_max_pair_dx': 1.20,
+            'preview_max_x': 24.00,
+            'preview_max_pair_dx': 1.50,
 
-            'preview_speed_4deg': 10.00,
-            'preview_speed_7deg': 8.00,
-            'preview_speed_12deg': 6.00,
-            'preview_speed_18deg': 4.50,
+            'preview_speed_4deg': 15.00,
+            'preview_speed_7deg': 12.00,
+            'preview_speed_12deg': 9.00,
+            'preview_speed_18deg': 6.75,
 
-            # Long-range curve prediction for 15 m/s operation.
+            # Long-range curve prediction for 22.5 m/s operation.
             'curve_prediction_enable': True,
-            'curve_near_distance': 6.0,
-            'curve_mid_distance': 12.0,
-            'curve_far_distance': 18.0,
+            'curve_near_distance': 8.0,
+            'curve_mid_distance': 16.0,
+            'curve_far_distance': 24.0,
             'curve_soft_deg': 4.0,
             'curve_medium_deg': 8.0,
             'curve_hard_deg': 14.0,
-            'curve_speed_soft': 10.0,
-            'curve_speed_medium': 8.0,
-            'curve_speed_hard': 6.0,
+            'curve_speed_soft': 15.0,
+            'curve_speed_medium': 12.0,
+            'curve_speed_hard': 9.0,
             'curve_min_confidence': 0.25,
 
             'front_stop_distance': 1.00,
@@ -157,12 +157,12 @@ class LidarRacer(Node):
             'ttc_slow_sec': 1.10,
             'emergency_slow_speed': 2.50,
 
-            'lidar_max_use_range': 22.0,
+            'lidar_max_use_range': 36.0,
             'cluster_gap': 0.18,
             'cluster_max_width': 0.22,
 
             'detection_min_x': 0.15,
-            'detection_max_x': 20.0,
+            'detection_max_x': 32.0,
             'detection_max_abs_y': 1.50,
             'side_deadband_y': 0.15,
 
@@ -173,7 +173,7 @@ class LidarRacer(Node):
             'boundary_min_abs_y_m': 0.25,
             'boundary_max_abs_y_m': 3.50,
             'boundary_min_x_m': 0.35,
-            'boundary_max_x_m': 20.0,
+            'boundary_max_x_m': 32.0,
             'boundary_pair_min_width_m': 0.90,
             'boundary_pair_max_width_m': 4.50,
             'boundary_near_window_m': 2.00,
@@ -188,13 +188,13 @@ class LidarRacer(Node):
             'side_wall_max_distance_m': 4.50,
             'side_wall_target_x_m': 3.00,
             'side_wall_max_offset_m': 0.90,
-            'side_wall_fallback_speed_mps': 4.00,
+            'side_wall_fallback_speed_mps': 6.00,
 
             'loss_hold_frames': 2,
             'loss_slow_frames': 5,
-            'loss_hold_speed': 3.00,
-            'loss_slow_speed': 1.80,
-            'loss_recovery_speed': 1.00,
+            'loss_hold_speed': 4.50,
+            'loss_slow_speed': 2.70,
+            'loss_recovery_speed': 1.50,
             'loss_recovery_front_clear_m': 1.25,
         }
 
@@ -252,10 +252,10 @@ class LidarRacer(Node):
 
             # 주요 안전 조건
             if param.name == 'speed_straight':
-                if value <= 0.0 or value > 15.0:
+                if value <= 0.0 or value > 22.5:
                     return SetParametersResult(
                         successful=False,
-                        reason='speed_straight must be 0~15 m/s'
+                        reason='speed_straight must be 0~22.5 m/s'
                     )
 
             if param.name == 'max_steer_deg':
