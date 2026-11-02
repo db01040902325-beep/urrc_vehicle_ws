@@ -5,6 +5,7 @@
     <self_collide>false</self_collide>
     <link name="chassis">
       <inertial>
+        <pose>0 0 -0.025 0 0 0</pose>
         <mass>3.2</mass>
         <inertia>
           <ixx>0.018</ixx>
@@ -72,8 +73,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.2</mu>
-              <mu2>1.2</mu2>
+              <mu>1.8</mu>
+              <mu2>1.8</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -100,8 +101,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.2</mu>
-              <mu2>1.2</mu2>
+              <mu>1.8</mu>
+              <mu2>1.8</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -128,8 +129,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.2</mu>
-              <mu2>1.2</mu2>
+              <mu>1.8</mu>
+              <mu2>1.8</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -156,8 +157,8 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.2</mu>
-              <mu2>1.2</mu2>
+              <mu>1.8</mu>
+              <mu2>1.8</mu2>
               <fdir1>0 0 1</fdir1>
             </ode>
           </friction>
@@ -172,7 +173,7 @@
         <limit>
           <lower>-0.610865</lower>
           <upper>0.610865</upper>
-          <velocity>3.5</velocity>
+          <velocity>5.0</velocity>
           <effort>20</effort>
         </limit>
       </axis>
@@ -185,7 +186,7 @@
         <limit>
           <lower>-0.610865</lower>
           <upper>0.610865</upper>
-          <velocity>3.5</velocity>
+          <velocity>5.0</velocity>
           <effort>20</effort>
         </limit>
       </axis>
@@ -322,7 +323,7 @@
           </scan>
           <range>
             <min>0.05</min>
-            <max>8.0</max>
+            <max>12.0</max>
             <resolution>0.01</resolution>
           </range>
         </lidar>
@@ -378,11 +379,11 @@
       <wheel_radius>0.045</wheel_radius>
       <steering_limit>0.610865</steering_limit>
       <min_velocity>-1.5</min_velocity>
-      <max_velocity>6.5</max_velocity>
-      <min_acceleration>-8.0</min_acceleration>
-      <max_acceleration>8.0</max_acceleration>
-      <steer_p_gain>14.0</steer_p_gain>
-      <odom_publish_frequency>50</odom_publish_frequency>
+      <max_velocity>10.0</max_velocity>
+      <min_acceleration>-10.0</min_acceleration>
+      <max_acceleration>10.0</max_acceleration>
+      <steer_p_gain>18.0</steer_p_gain>
+      <odom_publish_frequency>100</odom_publish_frequency>
     </plugin>
   </model>
 </sdf>
