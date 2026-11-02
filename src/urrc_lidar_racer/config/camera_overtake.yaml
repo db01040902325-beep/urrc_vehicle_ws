@@ -45,6 +45,15 @@ overtake_fusion:
     fusion_camera_min_weight: 0.20
     sensor_degraded_confidence: 0.20
     sensor_degraded_speed_mps: 4.0
+
+    # 센서 상태 감시 / Fail-safe
+    camera_timeout_sec: 0.50
+    boundary_timeout_sec: 0.35
+    rear_scan_timeout_sec: 0.35
+    camera_fail_speed_mps: 12.0
+    rear_lidar_fail_speed_mps: 10.0
+    multi_sensor_fail_speed_mps: 4.0
+
     camera_fallback_speed_mps: 3.00
     camera_fallback_gain_scale: 1.35
     max_steer_deg: 28.0
