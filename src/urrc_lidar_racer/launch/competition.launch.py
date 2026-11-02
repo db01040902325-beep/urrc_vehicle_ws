@@ -101,6 +101,13 @@ def generate_launch_description():
         'race_camera_overtake.launch.py'
     )
 
+    rolling_rosbag = os.path.join(
+        home,
+        'urrc_vehicle_ws',
+        'scripts',
+        'rolling_rosbag.sh'
+    )
+
     patched_world = os.path.join(
         tempfile.gettempdir(),
         f'urrc_monza_vehicle_{os.getuid()}.sdf'
@@ -218,6 +225,14 @@ exit 1
         }.items()
     )
 
+    rosbag_recorder = ExecuteProcess(
+        cmd=[
+            'bash',
+            rolling_rosbag,
+        ],
+        output='screen'
+    )
+
     return LaunchDescription([
 
         DeclareLaunchArgument(
@@ -261,6 +276,13 @@ exit 1
                     TimerAction(
                         period=0.2,
                         actions=[race]
+                    ),
+
+                    # Save one ROS bag per run. The recorder script keeps
+                    # only the newest 10 runs and removes the oldest first.
+                    TimerAction(
+                        period=1.0,
+                        actions=[rosbag_recorder]
                     ),
 
                     # Camera / perception nodes must be alive before the
