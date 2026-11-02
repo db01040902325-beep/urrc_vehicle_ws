@@ -6,7 +6,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import Imu, LaserScan
 from std_msgs.msg import Bool, Float32, String
 
 
@@ -28,7 +28,22 @@ class OvertakeFusion(Node):
             'final_cmd_topic': '/model/urrc_car/cmd_vel',
             'scan_topic': '/scan',
             'rear_scan_topic': '/rear_scan',
+            'imu_topic': '/imu',
             'wheelbase': 0.330,
+
+            # IMU high-speed stabilization.
+            'imu_stability_enable': True,
+            'imu_timeout_sec': 0.15,
+            'imu_fail_speed_mps': 8.0,
+            'imu_lateral_soft_mps2': 12.0,
+            'imu_lateral_hard_mps2': 20.0,
+            'imu_roll_soft_deg': 7.0,
+            'imu_roll_hard_deg': 14.0,
+            'imu_yaw_overshoot_ratio': 1.35,
+            'imu_yaw_margin_rad_s': 0.80,
+            'imu_spin_yaw_rate_rad_s': 6.0,
+            'imu_min_speed_factor': 0.35,
+            'imu_steer_damping': 0.70,
 
             'camera_gain_deg': 5.5,
             'camera_min_confidence': 0.35,
@@ -99,6 +114,11 @@ class OvertakeFusion(Node):
         self.rear_scan = None
         self.rear_scan_stamp = 0.0
 
+        self.imu_stamp = 0.0
+        self.imu_yaw_rate = 0.0
+        self.imu_lateral_accel = 0.0
+        self.imu_roll_rad = 0.0
+
         self.camera_offset = 0.0
         self.camera_confidence = 0.0
         self.start_allowed = not bool(
@@ -133,6 +153,12 @@ class OvertakeFusion(Node):
             str(self.get_parameter('rear_scan_topic').value),
             self.on_rear_scan,
             20,
+        )
+        self.create_subscription(
+            Imu,
+            str(self.get_parameter('imu_topic').value),
+            self.on_imu,
+            100,
         )
         self.create_subscription(
             Float32,
@@ -173,11 +199,23 @@ class OvertakeFusion(Node):
         self.front_object_detected_pub = self.create_publisher(
             Bool, '/race/front_vehicle_detected', 10
         )
+        self.imu_yaw_pub = self.create_publisher(
+            Float32, '/race/imu_yaw_rate_rad_s', 20
+        )
+        self.imu_lat_pub = self.create_publisher(
+            Float32, '/race/imu_lateral_accel_mps2', 20
+        )
+        self.imu_roll_pub = self.create_publisher(
+            Float32, '/race/imu_roll_deg', 20
+        )
+        self.stability_factor_pub = self.create_publisher(
+            Float32, '/race/stability_factor', 20
+        )
 
         self.create_timer(0.02, self.control_loop)
 
         self.get_logger().info(
-            'Fusion controller: dynamic braking + camera fallback + rear safety'
+            'Fusion controller: wall tracking support + IMU stabilization + overtaking'
         )
 
     def now_sec(self):
@@ -194,6 +232,35 @@ class OvertakeFusion(Node):
     def on_rear_scan(self, msg):
         self.rear_scan = msg
         self.rear_scan_stamp = self.now_sec()
+
+    def on_imu(self, msg):
+        self.imu_stamp = self.now_sec()
+        self.imu_yaw_rate = float(msg.angular_velocity.z)
+        self.imu_lateral_accel = float(msg.linear_acceleration.y)
+
+        q = msg.orientation
+        sinr_cosp = 2.0 * (
+            q.w * q.x + q.y * q.z
+        )
+        cosr_cosp = 1.0 - 2.0 * (
+            q.x * q.x + q.y * q.y
+        )
+        self.imu_roll_rad = math.atan2(
+            sinr_cosp,
+            cosr_cosp,
+        )
+
+        self.imu_yaw_pub.publish(
+            Float32(data=self.imu_yaw_rate)
+        )
+        self.imu_lat_pub.publish(
+            Float32(data=self.imu_lateral_accel)
+        )
+        self.imu_roll_pub.publish(
+            Float32(
+                data=math.degrees(self.imu_roll_rad)
+            )
+        )
 
     def on_camera_offset(self, msg):
         self.camera_offset = float(np.clip(msg.data, -1.0, 1.0))
@@ -418,6 +485,174 @@ class OvertakeFusion(Node):
 
         return self.output_speed, self.output_steer
 
+    def apply_imu_stability(
+        self,
+        speed,
+        steer,
+    ):
+        if not bool(
+            self.get_parameter(
+                'imu_stability_enable'
+            ).value
+        ):
+            return speed, steer, 1.0, 'IMU_OFF'
+
+        now = self.now_sec()
+        timeout = float(
+            self.get_parameter('imu_timeout_sec').value
+        )
+
+        if (
+            self.imu_stamp <= 0.0
+            or now - self.imu_stamp > timeout
+        ):
+            fail_speed = float(
+                self.get_parameter(
+                    'imu_fail_speed_mps'
+                ).value
+            )
+            return (
+                min(speed, fail_speed),
+                steer,
+                min(
+                    1.0,
+                    fail_speed / max(speed, 0.05)
+                ),
+                'IMU_FAILSAFE',
+            )
+
+        factor = 1.0
+        steer_factor = 1.0
+        status = 'IMU_OK'
+
+        lateral = abs(self.imu_lateral_accel)
+        lat_soft = float(
+            self.get_parameter(
+                'imu_lateral_soft_mps2'
+            ).value
+        )
+        lat_hard = float(
+            self.get_parameter(
+                'imu_lateral_hard_mps2'
+            ).value
+        )
+
+        if lateral > lat_soft:
+            factor = min(
+                factor,
+                math.sqrt(
+                    lat_soft
+                    / max(lateral, 0.01)
+                ),
+            )
+            status = 'IMU_LAT_LIMIT'
+
+        if lateral > lat_hard:
+            factor = min(factor, 0.50)
+            steer_factor = min(steer_factor, 0.75)
+            status = 'IMU_LAT_HARD'
+
+        roll_deg = abs(
+            math.degrees(self.imu_roll_rad)
+        )
+        roll_soft = float(
+            self.get_parameter(
+                'imu_roll_soft_deg'
+            ).value
+        )
+        roll_hard = float(
+            self.get_parameter(
+                'imu_roll_hard_deg'
+            ).value
+        )
+
+        if roll_deg > roll_soft:
+            factor = min(
+                factor,
+                max(
+                    0.50,
+                    roll_soft / max(roll_deg, 0.1),
+                ),
+            )
+            status = 'IMU_ROLL_LIMIT'
+
+        if roll_deg > roll_hard:
+            factor = min(factor, 0.40)
+            steer_factor = min(steer_factor, 0.65)
+            status = 'IMU_ROLL_HARD'
+
+        wheelbase = float(
+            self.get_parameter('wheelbase').value
+        )
+        expected_yaw = 0.0
+        if speed > 0.05:
+            expected_yaw = (
+                speed
+                * math.tan(steer)
+                / max(wheelbase, 1e-3)
+            )
+
+        measured_yaw = self.imu_yaw_rate
+        yaw_ratio = float(
+            self.get_parameter(
+                'imu_yaw_overshoot_ratio'
+            ).value
+        )
+        yaw_margin = float(
+            self.get_parameter(
+                'imu_yaw_margin_rad_s'
+            ).value
+        )
+        spin_limit = float(
+            self.get_parameter(
+                'imu_spin_yaw_rate_rad_s'
+            ).value
+        )
+
+        overshoot_limit = max(
+            spin_limit,
+            abs(expected_yaw) * yaw_ratio + yaw_margin,
+        )
+
+        if abs(measured_yaw) > overshoot_limit:
+            factor = min(factor, 0.60)
+            steer_factor = min(
+                steer_factor,
+                float(
+                    self.get_parameter(
+                        'imu_steer_damping'
+                    ).value
+                ),
+            )
+            status = 'IMU_YAW_LIMIT'
+
+        if (
+            abs(expected_yaw) > 0.50
+            and abs(measured_yaw) > 0.50
+            and expected_yaw * measured_yaw < 0.0
+        ):
+            factor = min(factor, 0.50)
+            steer_factor = min(steer_factor, 0.55)
+            status = 'IMU_YAW_MISMATCH'
+
+        min_factor = float(
+            self.get_parameter(
+                'imu_min_speed_factor'
+            ).value
+        )
+        factor = float(np.clip(
+            factor,
+            min_factor,
+            1.0,
+        ))
+
+        return (
+            speed * factor,
+            steer * steer_factor,
+            factor,
+            status,
+        )
+
     def max_steer_rad(self):
         return math.radians(
             float(self.get_parameter('max_steer_deg').value)
@@ -508,6 +743,9 @@ class OvertakeFusion(Node):
         self.state_pub.publish(String(data=self.state.name))
         self.mode_pub.publish(String(data=mode))
         self.safe_speed_pub.publish(Float32(data=0.0))
+        self.stability_factor_pub.publish(
+            Float32(data=0.0)
+        )
 
     def publish_command(self, speed, steer, mode):
         speed = float(np.clip(
@@ -521,7 +759,27 @@ class OvertakeFusion(Node):
             self.max_steer_rad(),
         ))
 
-        speed, steer = self.limit_final_command(speed, steer)
+        (
+            speed,
+            steer,
+            stability_factor,
+            imu_status,
+        ) = self.apply_imu_stability(
+            speed,
+            steer,
+        )
+
+        self.stability_factor_pub.publish(
+            Float32(data=float(stability_factor))
+        )
+
+        if imu_status != 'IMU_OK':
+            mode = f'{mode}:{imu_status}'
+
+        speed, steer = self.limit_final_command(
+            speed,
+            steer,
+        )
 
         command = Twist()
         command.linear.x = speed
