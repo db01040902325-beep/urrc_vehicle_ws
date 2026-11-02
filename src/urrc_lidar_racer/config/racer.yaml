@@ -88,6 +88,17 @@ lidar_racer:
     boundary_near_window_m: 2.00
     boundary_target_ema_alpha: 0.45
 
+    # 장거리 벽 추적 실패 시 좌우 가드레일 거리로 중앙 유지
+    side_wall_fallback_enable: true
+    side_wall_angle_min_deg: 55.0
+    side_wall_angle_max_deg: 88.0
+    side_wall_percentile: 20.0
+    side_wall_min_distance_m: 0.25
+    side_wall_max_distance_m: 4.50
+    side_wall_target_x_m: 3.00
+    side_wall_max_offset_m: 0.90
+    side_wall_fallback_speed_mps: 4.00
+
     # Track-loss
     loss_hold_frames: 2
     loss_slow_frames: 5
