@@ -49,12 +49,6 @@ def generate_launch_description():
         'run_world.py'
     )
 
-    traffic_lights = os.path.join(
-        track_share,
-        'scripts',
-        'traffic_lights_v10.py'
-    )
-
     gui_config = os.path.join(
         track_share,
         'worlds',
@@ -80,8 +74,8 @@ def generate_launch_description():
 
     partition = f'urrc_practice_{os.getuid()}'
 
-    # Latest urrc_2 Monza server, with the start-light gantry.
-    # Auto lights are delayed until the vehicle/camera have spawned.
+    # Latest urrc_2 Monza server. Current run_world.py owns the official
+    # v10.8 five-light sequence, so do not start a second light controller.
     gazebo_server = ExecuteProcess(
         cmd=[
             sys.executable,
@@ -90,7 +84,6 @@ def generate_launch_description():
             '--server',
             '--view',
             'grid',
-            '--no-auto-start',
         ],
         output='screen'
     )
@@ -157,17 +150,6 @@ exit 1
         }.items()
     )
 
-    start_lights = ExecuteProcess(
-        cmd=[
-            sys.executable,
-            traffic_lights,
-            '--track',
-            'monza',
-            '--skip-camera-check',
-        ],
-        output='screen'
-    )
-
     return LaunchDescription([
 
         DeclareLaunchArgument(
@@ -205,16 +187,12 @@ exit 1
                 on_exit=[
                     gazebo_gui,
 
-                    # Camera bridge and fusion start first.
+                    # Bring vehicle sensors and control online immediately
+                    # after the model exists. run_world.py independently
+                    # waits for Gazebo readiness before its official lights.
                     TimerAction(
-                        period=1.0,
+                        period=0.2,
                         actions=[race]
-                    ),
-
-                    # Then run 5-red sequence.
-                    TimerAction(
-                        period=3.0,
-                        actions=[start_lights]
                     ),
                 ]
             )
