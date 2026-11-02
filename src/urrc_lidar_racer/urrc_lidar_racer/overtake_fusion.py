@@ -77,15 +77,17 @@ class OvertakeFusion(Node):
             'center_wall_min_m': 0.25,
             'center_wall_max_m': 4.50,
             'center_error_scale_m': 0.80,
-            'center_wall_gain_deg': 18.0,
-            'center_camera_gain_deg': 6.0,
+            'center_wall_gain_deg': 10.0,
+            'center_camera_gain_deg': 4.0,
             'center_align_engage_error_m': 0.18,
             'center_align_release_error_m': 0.08,
-            'center_align_speed_mps': 4.0,
+            'center_align_speed_mps': 3.5,
             'center_near_wall_m': 0.55,
-            'center_near_wall_speed_mps': 2.0,
-            'center_near_wall_steer_deg': 24.0,
-            'center_steer_ema_alpha': 0.22,
+            'center_near_wall_speed_mps': 1.8,
+            'center_near_wall_steer_deg': 16.0,
+            'center_steer_ema_alpha': 0.14,
+            'center_max_correction_deg': 10.0,
+            'center_correction_rate_deg_s': 12.0,
 
             'max_steer_deg': 35.0,
             'max_speed_mps': 15.00,
@@ -156,7 +158,7 @@ class OvertakeFusion(Node):
             # Final actuator smoothing.
             'final_accel_limit_mps2': 10.0,
             'final_decel_limit_mps2': 10.0,
-            'final_steer_rate_deg_s': 75.0,
+            'final_steer_rate_deg_s': 45.0,
 
             'overtake_max_base_steer_deg': 10.0,
             'overtake_detect_hold_sec': 0.25,
@@ -221,6 +223,7 @@ class OvertakeFusion(Node):
         self.center_align_active = False
         self.center_error_m = 0.0
         self.center_filtered_correction = 0.0
+        self.center_last_update_time = self.now_sec()
 
         self.output_speed = 0.0
         self.output_steer = 0.0
@@ -644,15 +647,53 @@ class OvertakeFusion(Node):
             + 0.12 * camera_correction
         )
 
+        max_center = math.radians(
+            float(
+                self.get_parameter(
+                    'center_max_correction_deg'
+                ).value
+            )
+        )
+        correction = float(np.clip(
+            correction,
+            -max_center,
+            max_center,
+        ))
+
+        # Gradual lane merge: do not jump directly to the target steering
+        # angle. Limit how fast the centering correction itself can change.
+        now = self.now_sec()
+        dt = float(np.clip(
+            now - self.center_last_update_time,
+            0.01,
+            0.10,
+        ))
+        self.center_last_update_time = now
+
+        center_rate = math.radians(
+            float(
+                self.get_parameter(
+                    'center_correction_rate_deg_s'
+                ).value
+            )
+        )
+        max_delta = center_rate * dt
+        delta = correction - self.center_filtered_correction
+        delta = float(np.clip(
+            delta,
+            -max_delta,
+            max_delta,
+        ))
+        self.center_filtered_correction += delta
+
         alpha = float(
             self.get_parameter('center_steer_ema_alpha').value
         )
         alpha = float(np.clip(alpha, 0.05, 1.0))
-        self.center_filtered_correction = (
-            alpha * correction
-            + (1.0 - alpha) * self.center_filtered_correction
+        correction = (
+            alpha * self.center_filtered_correction
+            + (1.0 - alpha) * correction
         )
-        correction = self.center_filtered_correction
 
         speed_limit = float('inf')
         if self.center_align_active:
@@ -691,14 +732,28 @@ class OvertakeFusion(Node):
 
             # Too close to left wall -> steer right. Too close to right wall
             # -> steer left, following the established steering convention.
-            if left_distance < right_distance:
-                # Left wall is closer -> steer right.
-                correction = -abs(emergency_steer)
-            else:
-                # Right wall is closer -> steer left.
-                correction = abs(emergency_steer)
+            target_emergency = (
+                -abs(emergency_steer)
+                if left_distance < right_distance
+                else abs(emergency_steer)
+            )
 
-            self.center_filtered_correction = correction
+            # Even near a wall, ramp toward the stronger correction instead
+            # of snapping the steering wheel instantly.
+            max_delta = math.radians(
+                float(
+                    self.get_parameter(
+                        'center_correction_rate_deg_s'
+                    ).value
+                )
+            ) * 0.05
+            emergency_delta = float(np.clip(
+                target_emergency - self.center_filtered_correction,
+                -max_delta,
+                max_delta,
+            ))
+            self.center_filtered_correction += emergency_delta
+            correction = self.center_filtered_correction
             self.center_align_active = True
 
         self.center_active_pub.publish(
