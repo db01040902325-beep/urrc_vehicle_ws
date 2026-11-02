@@ -74,6 +74,10 @@ class OvertakeFusion(Node):
             'scan_timeout_sec': 0.25,
 
             'emergency_stop_m': 1.00,
+            'front_min_valid_range_m': 0.25,
+            'front_sector_deg': 7.0,
+            'front_percentile': 25.0,
+            'front_emergency_confirm_frames': 3,
             'hard_ttc_sec': 0.30,
             'reaction_time_sec': 0.25,
             'brake_decel_mps2': 10.0,
@@ -194,6 +198,7 @@ class OvertakeFusion(Node):
 
         self.defend_side = 0.0
         self.last_defense_end = -1e9
+        self.front_emergency_count = 0
 
         self.output_speed = 0.0
         self.output_steer = 0.0
@@ -420,10 +425,31 @@ class OvertakeFusion(Node):
         return values
 
     def front_distance(self):
-        values = self.sector_values(self.scan, -9.0, 9.0)
+        sector = float(
+            self.get_parameter('front_sector_deg').value
+        )
+        values = self.sector_values(
+            self.scan,
+            -sector,
+            sector,
+        )
         if values.size == 0:
             return float('inf')
-        return float(np.percentile(values, 12))
+
+        minimum_valid = float(
+            self.get_parameter(
+                'front_min_valid_range_m'
+            ).value
+        )
+        values = values[values >= minimum_valid]
+
+        if values.size == 0:
+            return float('inf')
+
+        percentile = float(
+            self.get_parameter('front_percentile').value
+        )
+        return float(np.percentile(values, percentile))
 
     def side_clearance(self, left):
         if left:
@@ -1392,12 +1418,38 @@ class OvertakeFusion(Node):
         raw_timeout = float(
             self.get_parameter('raw_cmd_timeout_sec').value
         )
-        if (
-            self.raw_cmd_stamp <= 0.0
-            or now - self.raw_cmd_stamp > raw_timeout
-        ):
-            self.publish_stop('RAW_CMD_TIMEOUT')
-            return
+        raw_cmd_fresh = (
+            self.raw_cmd_stamp > 0.0
+            and now - self.raw_cmd_stamp <= raw_timeout
+        )
+
+        if not raw_cmd_fresh:
+            camera_timeout = float(
+                self.get_parameter(
+                    'camera_timeout_sec'
+                ).value
+            )
+            camera_fresh = (
+                self.camera_stamp > 0.0
+                and now - self.camera_stamp <= camera_timeout
+            )
+            camera_can_recover = (
+                self.start_allowed
+                and camera_fresh
+                and self.camera_confidence
+                >= float(
+                    self.get_parameter(
+                        'camera_min_confidence'
+                    ).value
+                )
+            )
+
+            if not camera_can_recover:
+                self.publish_stop('RAW_CMD_TIMEOUT')
+                return
+
+            # Let camera fallback below take control with base speed zero.
+            self.raw_cmd = Twist()
 
         scan_timeout = float(
             self.get_parameter('scan_timeout_sec').value
@@ -1561,9 +1613,26 @@ class OvertakeFusion(Node):
         else:
             ttc = float('inf')
 
-        if front < emergency or (
-            base_speed > 0.5 and ttc < hard_ttc
-        ):
+        emergency_condition = (
+            front < emergency
+            or (
+                base_speed > 0.5
+                and ttc < hard_ttc
+            )
+        )
+
+        if emergency_condition:
+            self.front_emergency_count += 1
+        else:
+            self.front_emergency_count = 0
+
+        emergency_frames = int(
+            self.get_parameter(
+                'front_emergency_confirm_frames'
+            ).value
+        )
+
+        if self.front_emergency_count >= emergency_frames:
             self.publish_stop('EMERGENCY_STOP')
             return
 
