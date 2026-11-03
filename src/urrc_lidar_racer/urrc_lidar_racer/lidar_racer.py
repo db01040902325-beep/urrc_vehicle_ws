@@ -1241,14 +1241,31 @@ class LidarRacer(Node):
         ]
 
         points = []
+        previous_x = -1.0
+
         for distance in distances:
             point = self.center_from_boundaries(
                 left,
                 right,
                 distance,
             )
-            if point is not None:
-                points.append(point)
+            if point is None:
+                continue
+
+            # A requested farther preview point must actually be farther
+            # forward. Reusing a nearer fallback point creates a fake
+            # ~180-degree turn when headings are differenced.
+            if point[0] <= previous_x + 0.50:
+                continue
+
+            if abs(point[0] - distance) > max(
+                3.0,
+                0.35 * distance,
+            ):
+                continue
+
+            points.append(point)
+            previous_x = point[0]
 
         if len(points) < 2:
             return 0.0, float(self.speed_straight)
@@ -1259,7 +1276,7 @@ class LidarRacer(Node):
         for point in points:
             dx = point[0] - previous[0]
             dy = point[1] - previous[1]
-            if math.hypot(dx, dy) < 0.20:
+            if dx <= 0.20 or math.hypot(dx, dy) < 0.50:
                 continue
             headings.append(math.atan2(dy, dx))
             previous = point
@@ -1267,7 +1284,13 @@ class LidarRacer(Node):
         if not headings:
             return 0.0, float(self.speed_straight)
 
-        candidates = [headings[-1]]
+        # Use change in path heading, not absolute far-point heading.
+        # Absolute heading can be large when one side boundary is temporarily
+        # missing even though the road itself is still straight.
+        candidates = []
+
+        if headings:
+            candidates.append(headings[0])
 
         for index in range(1, len(headings)):
             candidates.append(
