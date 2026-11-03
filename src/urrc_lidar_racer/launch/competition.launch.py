@@ -2,6 +2,8 @@ import json
 import os
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
+from copy import deepcopy
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -22,6 +24,66 @@ from launch.substitutions import (
     EnvironmentVariable,
     LaunchConfiguration,
 )
+
+
+def ensure_signal_active_sdf(worlds_dir, track):
+    target = os.path.join(
+        worlds_dir,
+        f'{track}_signal_active.sdf'
+    )
+    if os.path.isfile(target):
+        return target
+
+    race_path = os.path.join(
+        worlds_dir,
+        f'{track}_race.sdf'
+    )
+    tree = ET.parse(race_path)
+    world = tree.find('world')
+    gate = world.find("model[@name='race_start_gantry']")
+    if gate is None:
+        raise RuntimeError(
+            f'{track}: race_start_gantry missing'
+        )
+
+    root = ET.Element('sdf', version='1.9')
+    model = ET.SubElement(
+        root,
+        'model',
+        name='urrc_start_signal_active',
+    )
+    ET.SubElement(model, 'static').text = 'true'
+    ET.SubElement(model, 'pose').text = gate.findtext('pose')
+    link = ET.SubElement(
+        model,
+        'link',
+        name='signal_active_visuals',
+    )
+
+    for index in range(1, 6):
+        original = gate.find(
+            f"link[@name='gantry_visuals']/"
+            f"visual[@name='red_lens_{index}']"
+        )
+        if original is None:
+            raise RuntimeError(
+                f'{track}: red_lens_{index} missing'
+            )
+
+        visual = deepcopy(original)
+        visual.set(
+            'name',
+            f'active_red_lens_{index}',
+        )
+        link.append(visual)
+
+    ET.indent(root, space='  ')
+    ET.ElementTree(root).write(
+        target,
+        encoding='utf-8',
+        xml_declaration=True,
+    )
+    return target
 
 
 def generate_launch_description():
