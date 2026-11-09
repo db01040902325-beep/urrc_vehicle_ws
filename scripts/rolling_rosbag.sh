@@ -46,11 +46,14 @@ exec ros2 bag record \
   /camera/road_confidence \
   /race/lidar_cmd_vel \
   /race/controller_mode \
+  /race/stop_reason \
+  /race/front_clearance_m \
   /race/steering_deg \
   /race/speed_mps \
   /race/preview_angle_deg \
   /race/curve_prediction_deg \
   /race/curve_speed_limit_mps \
+  /race/lateral_speed_limit_mps \
   /race/hairpin_direction \
   /race/left_wall_distance_m \
   /race/right_wall_distance_m \
