@@ -85,6 +85,11 @@ overtake_fusion:
     max_speed_mps: 15.00
     raw_cmd_timeout_sec: 0.35
     scan_timeout_sec: 0.25
+    raw_cmd_soft_timeout_sec: 0.35
+    raw_cmd_hard_timeout_sec: 1.00
+    scan_soft_timeout_sec: 0.35
+    scan_hard_timeout_sec: 1.00
+    sensor_soft_speed_mps: 2.50
     lateral_limit_timeout_sec: 0.50
     emergency_stop_m: 1.00
     front_min_valid_range_m: 0.25
