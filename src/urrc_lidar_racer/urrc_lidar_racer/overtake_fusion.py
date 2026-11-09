@@ -470,6 +470,8 @@ class OvertakeFusion(Node):
 
         if bool(msg.data):
             self.start_allowed = True
+            self.stop_hold_until = 0.0
+            self.front_emergency_count = 0
             self.get_logger().info(
                 'Start gate latched OPEN'
             )
