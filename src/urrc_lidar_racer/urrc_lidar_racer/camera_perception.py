@@ -6,7 +6,7 @@ import rclpy
 from rclpy.node import Node
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
-from std_msgs.msg import Bool, Float32, Int32
+from std_msgs.msg import Bool, Float32, Int32, String
 
 
 class CameraPerception(Node):
@@ -34,12 +34,19 @@ class CameraPerception(Node):
         self.full_on_frames = 0
         self.off_frames = 0
         self.full_on_seen = False
+        self.start_state = (
+            'RACING'
+            if not bool(
+                self.get_parameter('start_gate_enable').value
+            )
+            else 'WAIT_LIGHTS'
+        )
         self.last_offset = 0.0
         self.last_confidence = 0.0
         self.last_red_ratio = 0.0
         self.last_lamp_count = 0
-        self.start_allowed = not bool(
-            self.get_parameter('start_gate_enable').value
+        self.start_allowed = (
+            self.start_state == 'RACING'
         )
 
         image_topic = str(self.get_parameter('image_topic').value)
@@ -53,6 +60,9 @@ class CameraPerception(Node):
         )
         self.start_pub = self.create_publisher(
             Bool, '/camera/start_allowed', 10
+        )
+        self.start_state_pub = self.create_publisher(
+            String, '/camera/start_state', 10
         )
         self.red_pub = self.create_publisher(
             Float32, '/camera/red_ratio', 10
@@ -102,6 +112,9 @@ class CameraPerception(Node):
         )
         self.start_pub.publish(
             Bool(data=bool(self.start_allowed))
+        )
+        self.start_state_pub.publish(
+            String(data=str(self.start_state))
         )
         self.red_pub.publish(
             Float32(data=float(self.last_red_ratio))
@@ -300,11 +313,13 @@ class CameraPerception(Node):
 
     def update_start_gate(self, lamp_count):
         if not bool(self.get_parameter('start_gate_enable').value):
+            self.start_state = 'RACING'
             self.start_allowed = True
             return
 
-        # Once released, do not re-arm during the race.
-        if self.start_allowed:
+        # RACING is terminal for the current run.
+        if self.start_state == 'RACING':
+            self.start_allowed = True
             return
 
         full_on_min = int(
@@ -320,29 +335,43 @@ class CameraPerception(Node):
             self.get_parameter('start_off_frames').value
         )
 
-        if not self.full_on_seen:
+        if self.start_state == 'WAIT_LIGHTS':
             if lamp_count >= full_on_min:
                 self.full_on_frames += 1
             else:
-                self.full_on_frames = max(0, self.full_on_frames - 1)
+                self.full_on_frames = max(
+                    0,
+                    self.full_on_frames - 1,
+                )
 
             if self.full_on_frames >= seen_need:
+                self.start_state = 'FIVE_LIGHTS_ON'
                 self.full_on_seen = True
                 self.off_frames = 0
                 self.get_logger().info(
-                    'Five-light start sequence armed'
+                    'Start state -> FIVE_LIGHTS_ON'
                 )
+            self.start_allowed = False
             return
 
-        if lamp_count <= off_max:
-            self.off_frames += 1
-        else:
-            self.off_frames = 0
+        if self.start_state == 'FIVE_LIGHTS_ON':
+            if lamp_count <= off_max:
+                self.off_frames += 1
+            else:
+                self.off_frames = 0
 
-        if self.off_frames >= off_need:
+            if self.off_frames >= off_need:
+                self.start_state = 'LIGHTS_OUT_CONFIRMED'
+                self.get_logger().info(
+                    'Start state -> LIGHTS_OUT_CONFIRMED'
+                )
+            self.start_allowed = False
+
+        if self.start_state == 'LIGHTS_OUT_CONFIRMED':
+            self.start_state = 'RACING'
             self.start_allowed = True
             self.get_logger().info(
-                'Start lights OFF -> GO'
+                'Start state -> RACING'
             )
 
 
