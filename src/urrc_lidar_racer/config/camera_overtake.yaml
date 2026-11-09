@@ -28,7 +28,7 @@ overtake_fusion:
 
     # IMU 고속 자세 안정화
     imu_stability_enable: true
-    imu_timeout_sec: 0.15
+    imu_timeout_sec: 0.30
     imu_fail_speed_mps: 8.0
     imu_lateral_soft_mps2: 12.0
     imu_lateral_hard_mps2: 20.0
@@ -51,9 +51,9 @@ overtake_fusion:
     sensor_degraded_speed_mps: 4.0
 
     # 센서 상태 감시 / Fail-safe
-    camera_timeout_sec: 0.50
-    boundary_timeout_sec: 0.35
-    rear_scan_timeout_sec: 0.35
+    camera_timeout_sec: 0.60
+    boundary_timeout_sec: 0.50
+    rear_scan_timeout_sec: 0.50
     camera_fail_speed_mps: 12.0
     rear_lidar_fail_speed_mps: 10.0
     multi_sensor_fail_speed_mps: 4.0
@@ -85,6 +85,7 @@ overtake_fusion:
     max_speed_mps: 15.00
     raw_cmd_timeout_sec: 0.35
     scan_timeout_sec: 0.25
+    lateral_limit_timeout_sec: 0.50
     emergency_stop_m: 1.00
     front_min_valid_range_m: 0.25
     front_sector_deg: 7.0
@@ -150,7 +151,7 @@ overtake_fusion:
     final_accel_limit_mps2: 10.0
     final_decel_limit_mps2: 4.0
     final_steer_rate_deg_s: 45.0
-    stop_hold_sec: 1.00
+    stop_hold_sec: 0.40
     stop_speed_deadband_mps: 0.20
     overtake_max_base_steer_deg: 10.0
     overtake_detect_hold_sec: 0.25
