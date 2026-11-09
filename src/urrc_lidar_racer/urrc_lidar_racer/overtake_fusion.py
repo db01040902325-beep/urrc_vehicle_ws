@@ -168,7 +168,7 @@ class OvertakeFusion(Node):
             'stop_hold_sec': 0.40,
             'stop_speed_deadband_mps': 0.20,
 
-            'overtake_max_base_steer_deg': 10.0,
+            'overtake_max_base_steer_deg': 7.0,
             'overtake_detect_hold_sec': 0.25,
 
             'shift_out_sec': 0.85,
