@@ -42,10 +42,12 @@ exec ros2 bag record \
   /rear_scan \
   /imu \
   /camera/start_allowed \
+  /camera/start_state \
   /camera/road_center_offset \
   /camera/road_confidence \
   /race/lidar_cmd_vel \
   /race/controller_mode \
+  /race/control_authority \
   /race/stop_reason \
   /race/front_clearance_m \
   /race/steering_deg \
