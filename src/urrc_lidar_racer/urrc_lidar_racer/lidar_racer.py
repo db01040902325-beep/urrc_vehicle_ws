@@ -202,7 +202,7 @@ class LidarRacer(Node):
             'boundary_target_ema_alpha': 0.45,
 
             # Robust side-wall centering fallback.
-            'side_wall_fallback_enable': True,
+            'side_wall_fallback_enable': False,
             'side_wall_angle_min_deg': 55.0,
             'side_wall_angle_max_deg': 88.0,
             'side_wall_percentile': 20.0,
