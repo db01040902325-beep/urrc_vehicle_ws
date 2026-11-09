@@ -125,6 +125,7 @@ class LidarRacer(Node):
             'speed_threshold_4_deg': 18.0,
 
             'lateral_accel_limit_mps2': 18.0,
+            'lateral_stability_deadband_deg': 3.0,
             'high_speed_steer_soft_limit_deg': 10.0,
             'high_speed_steer_threshold_mps': 12.0,
 
@@ -168,6 +169,9 @@ class LidarRacer(Node):
             'hairpin_speed_mps': 3.5,
             'hairpin_confirm_frames': 2,
             'hairpin_release_frames': 4,
+            'hairpin_min_speed_mps': 1.0,
+            'hairpin_open_ratio': 1.25,
+            'hairpin_direction_agreement_deg': 2.0,
 
             'front_stop_distance': 1.00,
             'front_slow_distance': 4.00,
@@ -608,7 +612,16 @@ class LidarRacer(Node):
         # remains below the configured threshold.
         # a_lat = v^2 * curvature, curvature = tan(delta) / wheelbase
         # ==========================================
-        delta_for_stability = math.radians(abs(steer_user_deg))
+        stability_deadband = float(
+            self.lateral_stability_deadband_deg
+        )
+        stability_steer_deg = max(
+            0.0,
+            abs(steer_user_deg) - stability_deadband,
+        )
+        delta_for_stability = math.radians(
+            stability_steer_deg
+        )
         curvature = abs(
             math.tan(delta_for_stability)
             / max(self.wheelbase, 1e-3)
@@ -774,6 +787,13 @@ class LidarRacer(Node):
             self.hairpin_direction = 0
             return None, float(self.speed_straight)
 
+        if self.last_speed < float(self.hairpin_min_speed_mps):
+            self.hairpin_active = False
+            self.hairpin_direction = 0
+            self.hairpin_confirm_count = 0
+            self.hairpin_release_count = 0
+            return None, float(self.speed_straight)
+
         front_half = float(self.hairpin_front_sector_deg)
         front_distance, _ = self.sector_scan_stats(
             msg,
@@ -830,19 +850,37 @@ class LidarRacer(Node):
             and front_near_ratio >= hit_ratio_required
         )
 
+        open_ratio = max(
+            1.0,
+            float(self.hairpin_open_ratio),
+        )
+
         if broad_wall:
             if (
                 right_open >= minimum_open
                 and right_open - left_open >= margin
+                and right_open >= left_open * open_ratio
             ):
-                # User convention: positive = right.
                 candidate_direction = 1
             elif (
                 left_open >= minimum_open
                 and left_open - right_open >= margin
+                and left_open >= right_open * open_ratio
             ):
-                # User convention: negative = left.
                 candidate_direction = -1
+
+        agreement_deg = float(
+            self.hairpin_direction_agreement_deg
+        )
+        if (
+            candidate_direction != 0
+            and abs(self.filtered_steer_deg) >= agreement_deg
+        ):
+            current_direction = (
+                1 if self.filtered_steer_deg > 0.0 else -1
+            )
+            if current_direction != candidate_direction:
+                candidate_direction = 0
 
         if not self.hairpin_active:
             if candidate_direction != 0:
