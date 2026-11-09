@@ -50,6 +50,10 @@ class Monitor(Node):
         self.left_wall_distance = None
         self.right_wall_distance = None
         self.center_align_active = None
+        self.stop_reason = 'UNKNOWN'
+        self.front_clearance = None
+        self.lateral_speed_limit = None
+        self.hairpin_direction = None
 
         self.odom_count = 0
         self.last_xy = None
@@ -91,6 +95,10 @@ class Monitor(Node):
         self.create_subscription(Float32, '/race/left_wall_distance_m', self.on_left_wall, 20)
         self.create_subscription(Float32, '/race/right_wall_distance_m', self.on_right_wall, 20)
         self.create_subscription(Bool, '/race/center_align_active', self.on_center_align_active, 20)
+        self.create_subscription(String, '/race/stop_reason', self.on_stop_reason, 20)
+        self.create_subscription(Float32, '/race/front_clearance_m', self.on_front_clearance, 20)
+        self.create_subscription(Float32, '/race/lateral_speed_limit_mps', self.on_lateral_limit, 20)
+        self.create_subscription(Float32, '/race/hairpin_direction', self.on_hairpin, 20)
         self.create_subscription(Odometry, '/model/urrc_car/odometry', self.on_odom, 50)
 
         self.done = False
@@ -196,6 +204,18 @@ class Monitor(Node):
     def on_center_align_active(self, msg):
         self.center_align_active = bool(msg.data)
 
+    def on_stop_reason(self, msg):
+        self.stop_reason = msg.data
+
+    def on_front_clearance(self, msg):
+        self.front_clearance = float(msg.data)
+
+    def on_lateral_limit(self, msg):
+        self.lateral_speed_limit = float(msg.data)
+
+    def on_hairpin(self, msg):
+        self.hairpin_direction = float(msg.data)
+
     def on_odom(self, msg):
         self.odom_count += 1
         x = float(msg.pose.pose.position.x)
@@ -241,6 +261,8 @@ class Monitor(Node):
                 f'defense={self.defense_active} defense_side={self.defense_side} '
                 f'center={self.center_align_active} center_err={self.center_error_m} '
                 f'wall_l={self.left_wall_distance} wall_r={self.right_wall_distance} '
+                f'front={self.front_clearance} stop={self.stop_reason} '
+                f'lat_limit={self.lateral_speed_limit} hairpin={self.hairpin_direction} '
                 f'mode={self.controller_mode} overtake={self.overtake_state}',
                 flush=True,
             )
@@ -290,6 +312,10 @@ class Monitor(Node):
         print(f'center_error_m={self.center_error_m}')
         print(f'left_wall_distance_m={self.left_wall_distance}')
         print(f'right_wall_distance_m={self.right_wall_distance}')
+        print(f'front_clearance_m={self.front_clearance}')
+        print(f'stop_reason={self.stop_reason}')
+        print(f'lateral_speed_limit_mps={self.lateral_speed_limit}')
+        print(f'hairpin_direction={self.hairpin_direction}')
         print('=== END_CI_RACE_SUMMARY ===')
 
 
