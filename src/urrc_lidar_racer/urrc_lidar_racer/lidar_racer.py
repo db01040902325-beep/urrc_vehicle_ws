@@ -138,7 +138,7 @@ class LidarRacer(Node):
             'preview_speed_12deg': 6.00,
             'preview_speed_18deg': 4.50,
 
-            # Long-range curve prediction for 22.5 m/s operation.
+            # Long-range curve prediction for current high-speed operation.
             'curve_prediction_enable': True,
             'curve_near_distance': 8.0,
             'curve_mid_distance': 16.0,
@@ -738,6 +738,36 @@ class LidarRacer(Node):
             len(hits) / float(total),
         )
 
+    def sector_near_ratio(
+        self,
+        msg,
+        deg_min,
+        deg_max,
+        maximum_distance,
+    ):
+        total = 0
+        near = 0
+
+        for i, distance in enumerate(msg.ranges):
+            angle_deg = math.degrees(
+                msg.angle_min + i * msg.angle_increment
+            )
+            if angle_deg < deg_min or angle_deg > deg_max:
+                continue
+
+            total += 1
+            if not math.isfinite(distance):
+                continue
+            if distance < msg.range_min:
+                continue
+            if distance <= maximum_distance:
+                near += 1
+
+        if total <= 0:
+            return 0.0
+
+        return near / float(total)
+
     def detect_hairpin(self, msg):
         if not bool(self.hairpin_enable):
             self.hairpin_active = False
@@ -745,10 +775,16 @@ class LidarRacer(Node):
             return None, float(self.speed_straight)
 
         front_half = float(self.hairpin_front_sector_deg)
-        front_distance, front_ratio = self.sector_scan_stats(
+        front_distance, _ = self.sector_scan_stats(
             msg,
             -front_half,
             front_half,
+        )
+        front_near_ratio = self.sector_near_ratio(
+            msg,
+            -front_half,
+            front_half,
+            float(self.hairpin_front_trigger_m),
         )
 
         inner = float(self.hairpin_side_inner_deg)
@@ -791,7 +827,7 @@ class LidarRacer(Node):
         broad_wall = (
             math.isfinite(front_distance)
             and front_distance <= trigger
-            and front_ratio >= hit_ratio_required
+            and front_near_ratio >= hit_ratio_required
         )
 
         if broad_wall:
