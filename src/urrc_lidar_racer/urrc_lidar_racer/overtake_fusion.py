@@ -34,7 +34,7 @@ class OvertakeFusion(Node):
 
             # IMU high-speed stabilization.
             'imu_stability_enable': True,
-            'imu_timeout_sec': 0.15,
+            'imu_timeout_sec': 0.30,
             'imu_fail_speed_mps': 8.0,
             'imu_lateral_soft_mps2': 12.0,
             'imu_lateral_hard_mps2': 20.0,
@@ -58,9 +58,9 @@ class OvertakeFusion(Node):
             'sensor_degraded_speed_mps': 4.0,
 
             # Sensor health / fail-safe.
-            'camera_timeout_sec': 0.50,
-            'boundary_timeout_sec': 0.35,
-            'rear_scan_timeout_sec': 0.35,
+            'camera_timeout_sec': 0.60,
+            'boundary_timeout_sec': 0.50,
+            'rear_scan_timeout_sec': 0.50,
             'camera_fail_speed_mps': 12.0,
             'rear_lidar_fail_speed_mps': 10.0,
             'multi_sensor_fail_speed_mps': 4.0,
@@ -93,6 +93,7 @@ class OvertakeFusion(Node):
             'max_speed_mps': 15.00,
             'raw_cmd_timeout_sec': 0.35,
             'scan_timeout_sec': 0.25,
+            'lateral_limit_timeout_sec': 0.50,
 
             'emergency_stop_m': 1.00,
             'front_min_valid_range_m': 0.25,
@@ -159,7 +160,7 @@ class OvertakeFusion(Node):
             'final_accel_limit_mps2': 10.0,
             'final_decel_limit_mps2': 10.0,
             'final_steer_rate_deg_s': 45.0,
-            'stop_hold_sec': 1.00,
+            'stop_hold_sec': 0.40,
             'stop_speed_deadband_mps': 0.20,
 
             'overtake_max_base_steer_deg': 10.0,
@@ -200,6 +201,10 @@ class OvertakeFusion(Node):
         self.camera_stamp = 0.0
         self.boundary_confidence = 0.0
         self.boundary_stamp = 0.0
+        self.lateral_speed_limit = float(
+            self.get_parameter('max_speed_mps').value
+        )
+        self.lateral_limit_stamp = 0.0
         self.start_allowed = not bool(
             self.get_parameter('start_gate_enable').value
         )
@@ -280,6 +285,12 @@ class OvertakeFusion(Node):
             ),
             self.on_boundary_confidence,
             10,
+        )
+        self.create_subscription(
+            Float32,
+            '/race/lateral_speed_limit_mps',
+            self.on_lateral_speed_limit,
+            20,
         )
         self.create_subscription(
             Bool,
@@ -371,6 +382,12 @@ class OvertakeFusion(Node):
         self.center_active_pub = self.create_publisher(
             Bool, '/race/center_align_active', 20
         )
+        self.front_clearance_pub = self.create_publisher(
+            Float32, '/race/front_clearance_m', 20
+        )
+        self.stop_reason_pub = self.create_publisher(
+            String, '/race/stop_reason', 20
+        )
 
         self.create_timer(0.02, self.control_loop)
 
@@ -435,6 +452,14 @@ class OvertakeFusion(Node):
             np.clip(msg.data, 0.0, 1.0)
         )
         self.boundary_stamp = self.now_sec()
+
+    def on_lateral_speed_limit(self, msg):
+        self.lateral_speed_limit = float(np.clip(
+            msg.data,
+            0.0,
+            float(self.get_parameter('max_speed_mps').value),
+        ))
+        self.lateral_limit_stamp = self.now_sec()
 
     def on_start_allowed(self, msg):
         # Start permission is a one-way latch for the current race.
@@ -1669,16 +1694,32 @@ class OvertakeFusion(Node):
         )
 
     def publish_stop(self, mode):
+        now = self.now_sec()
+        was_moving = self.output_speed > float(
+            self.get_parameter('stop_speed_deadband_mps').value
+        )
+
+        # WAIT_START and ordinary data waits must not arm a persistent hold.
+        # Only a stop that interrupts actual motion gets a short brake hold.
+        physical_hold_modes = {
+            'EMERGENCY_STOP',
+            'FRONT_LIDAR_TIMEOUT',
+            'PATH_SENSORS_LOST',
+        }
+        if was_moving and mode in physical_hold_modes:
+            self.stop_hold_until = (
+                now
+                + float(self.get_parameter('stop_hold_sec').value)
+            )
+        elif mode in {'WAIT_START', 'RAW_CMD_TIMEOUT'}:
+            self.stop_hold_until = 0.0
+
         self.output_speed = 0.0
         self.output_steer = 0.0
-        self.stop_hold_until = max(
-            self.stop_hold_until,
-            self.now_sec()
-            + float(self.get_parameter('stop_hold_sec').value),
-        )
         self.cmd_pub.publish(Twist())
         self.state_pub.publish(String(data=self.state.name))
         self.mode_pub.publish(String(data=mode))
+        self.stop_reason_pub.publish(String(data=mode))
         self.safe_speed_pub.publish(Float32(data=0.0))
         self.stability_factor_pub.publish(
             Float32(data=0.0)
@@ -1749,6 +1790,7 @@ class OvertakeFusion(Node):
         self.cmd_pub.publish(command)
         self.state_pub.publish(String(data=self.state.name))
         self.mode_pub.publish(String(data=mode))
+        self.stop_reason_pub.publish(String(data='NONE'))
 
     def control_loop(self):
         now = self.now_sec()
@@ -1840,6 +1882,15 @@ class OvertakeFusion(Node):
         )
 
         front = self.front_distance()
+        self.front_clearance_pub.publish(
+            Float32(
+                data=(
+                    float(front)
+                    if math.isfinite(front)
+                    else -1.0
+                )
+            )
+        )
         left = self.side_clearance(True)
         right = self.side_clearance(False)
         rear = self.rear_distance()
@@ -2562,6 +2613,23 @@ class OvertakeFusion(Node):
                 self.set_state(OvertakeState.RETURN)
 
         elif self.state == OvertakeState.RETURN:
+            if not health['rear_ok']:
+                # Never merge back when rear perception is stale.
+                self.set_state(OvertakeState.PASS)
+                self.publish_command(
+                    min(
+                        float(
+                            self.get_parameter(
+                                'rear_lidar_fail_speed_mps'
+                            ).value
+                        ),
+                        max(1.0, base_speed),
+                    ),
+                    steer,
+                    'REAR_LIDAR_STALE_HOLD_PASS',
+                )
+                return
+
             rear_ok = (
                 rear
                 > float(
@@ -2637,6 +2705,19 @@ class OvertakeFusion(Node):
 
         if self.state == OvertakeState.CRUISE and center_active:
             speed = min(speed, center_speed_limit)
+
+        lateral_limit_fresh = (
+            self.lateral_limit_stamp > 0.0
+            and now - self.lateral_limit_stamp
+            <= float(
+                self.get_parameter(
+                    'lateral_limit_timeout_sec'
+                ).value
+            )
+        )
+        if lateral_limit_fresh and speed > self.lateral_speed_limit:
+            speed = self.lateral_speed_limit
+            mode = f'{mode}:LATERAL_LIMIT'
 
         health_speed_limit = self.fail_safe_speed_limit(
             health
