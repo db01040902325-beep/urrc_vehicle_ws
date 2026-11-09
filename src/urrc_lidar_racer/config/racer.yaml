@@ -109,7 +109,7 @@ lidar_racer:
     boundary_target_ema_alpha: 0.45
 
     # 장거리 벽 추적 실패 시 좌우 가드레일 거리로 중앙 유지
-    side_wall_fallback_enable: true
+    side_wall_fallback_enable: false
     side_wall_angle_min_deg: 55.0
     side_wall_angle_max_deg: 88.0
     side_wall_percentile: 20.0
