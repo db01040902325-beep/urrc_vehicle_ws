@@ -1745,6 +1745,8 @@ class OvertakeFusion(Node):
             self.cmd_pub.publish(Twist())
             self.state_pub.publish(String(data=self.state.name))
             self.mode_pub.publish(String(data=f'{mode}:STOP_HOLD'))
+            self.stop_reason_pub.publish(String(data='STOP_HOLD'))
+            self.control_authority_pub.publish(String(data='STOP_HOLD'))
             self.safe_speed_pub.publish(Float32(data=0.0))
             return
 
