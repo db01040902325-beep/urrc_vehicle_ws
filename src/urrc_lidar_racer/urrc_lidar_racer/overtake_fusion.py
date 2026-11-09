@@ -393,6 +393,9 @@ class OvertakeFusion(Node):
         self.stop_reason_pub = self.create_publisher(
             String, '/race/stop_reason', 20
         )
+        self.control_authority_pub = self.create_publisher(
+            String, '/race/control_authority', 20
+        )
 
         self.create_timer(0.02, self.control_loop)
 
@@ -1727,6 +1730,7 @@ class OvertakeFusion(Node):
         self.state_pub.publish(String(data=self.state.name))
         self.mode_pub.publish(String(data=mode))
         self.stop_reason_pub.publish(String(data=mode))
+        self.control_authority_pub.publish(String(data='STOP'))
         self.safe_speed_pub.publish(Float32(data=0.0))
         self.stability_factor_pub.publish(
             Float32(data=0.0)
@@ -1798,6 +1802,7 @@ class OvertakeFusion(Node):
         self.state_pub.publish(String(data=self.state.name))
         self.mode_pub.publish(String(data=mode))
         self.stop_reason_pub.publish(String(data='NONE'))
+        self.control_authority_pub.publish(String(data=mode))
 
     def control_loop(self):
         now = self.now_sec()
@@ -2051,6 +2056,45 @@ class OvertakeFusion(Node):
 
         if self.front_emergency_count >= emergency_frames:
             self.publish_stop('EMERGENCY_STOP')
+            return
+
+        # Explicit control priority:
+        # emergency stop > wall danger avoidance > base path / hairpin >
+        # overtaking. Wall danger cancels any active maneuver until clear.
+        if center_active:
+            if self.state != OvertakeState.CRUISE:
+                self.set_state(OvertakeState.CRUISE)
+
+            wall_steer = (
+                0.25 * steer
+                + center_correction
+            )
+            wall_steer = float(np.clip(
+                wall_steer,
+                -math.radians(10.0),
+                math.radians(10.0),
+            ))
+
+            wall_speed = (
+                base_speed
+                if base_speed > 0.05
+                else float(
+                    self.get_parameter(
+                        'wall_danger_critical_speed_mps'
+                    ).value
+                )
+            )
+            wall_speed = min(
+                wall_speed,
+                center_speed_limit,
+                self.safe_speed_for_distance(front),
+            )
+
+            self.publish_command(
+                wall_speed,
+                wall_steer,
+                'WALL_AVOID_PRIORITY',
+            )
             return
 
         # If LiDAR path generation has dropped to zero but the camera still
