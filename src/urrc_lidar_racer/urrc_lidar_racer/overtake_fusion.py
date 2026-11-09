@@ -93,6 +93,11 @@ class OvertakeFusion(Node):
             'max_speed_mps': 15.00,
             'raw_cmd_timeout_sec': 0.35,
             'scan_timeout_sec': 0.25,
+            'raw_cmd_soft_timeout_sec': 0.35,
+            'raw_cmd_hard_timeout_sec': 1.00,
+            'scan_soft_timeout_sec': 0.35,
+            'scan_hard_timeout_sec': 1.00,
+            'sensor_soft_speed_mps': 2.50,
             'lateral_limit_timeout_sec': 0.50,
 
             'emergency_stop_m': 1.00,
@@ -1797,49 +1802,62 @@ class OvertakeFusion(Node):
     def control_loop(self):
         now = self.now_sec()
 
-        raw_timeout = float(
-            self.get_parameter('raw_cmd_timeout_sec').value
+        raw_soft = float(
+            self.get_parameter('raw_cmd_soft_timeout_sec').value
         )
-        raw_cmd_fresh = (
-            self.raw_cmd_stamp > 0.0
-            and now - self.raw_cmd_stamp <= raw_timeout
+        raw_hard = float(
+            self.get_parameter('raw_cmd_hard_timeout_sec').value
+        )
+        scan_soft = float(
+            self.get_parameter('scan_soft_timeout_sec').value
+        )
+        scan_hard = float(
+            self.get_parameter('scan_hard_timeout_sec').value
         )
 
-        if not raw_cmd_fresh:
-            camera_timeout = float(
+        raw_age = (
+            float('inf')
+            if self.raw_cmd_stamp <= 0.0
+            else max(0.0, now - self.raw_cmd_stamp)
+        )
+        scan_age = (
+            float('inf')
+            if self.scan_stamp <= 0.0
+            else max(0.0, now - self.scan_stamp)
+        )
+
+        raw_degraded = raw_age > raw_soft
+        scan_degraded = scan_age > scan_soft
+
+        camera_timeout = float(
+            self.get_parameter('camera_timeout_sec').value
+        )
+        camera_fresh = (
+            self.camera_stamp > 0.0
+            and now - self.camera_stamp <= camera_timeout
+        )
+        camera_can_recover = (
+            self.start_allowed
+            and camera_fresh
+            and self.camera_confidence
+            >= float(
                 self.get_parameter(
-                    'camera_timeout_sec'
+                    'camera_min_confidence'
                 ).value
             )
-            camera_fresh = (
-                self.camera_stamp > 0.0
-                and now - self.camera_stamp <= camera_timeout
-            )
-            camera_can_recover = (
-                self.start_allowed
-                and camera_fresh
-                and self.camera_confidence
-                >= float(
-                    self.get_parameter(
-                        'camera_min_confidence'
-                    ).value
-                )
-            )
+        )
 
+        if raw_age > raw_hard:
             if not camera_can_recover:
                 self.publish_stop('RAW_CMD_TIMEOUT')
                 return
 
-            # Let camera fallback below take control with base speed zero.
+            # Hard raw-command timeout can still recover from camera, but the
+            # vehicle must re-enter through the deliberate low-speed fallback.
             self.raw_cmd = Twist()
+            raw_degraded = True
 
-        scan_timeout = float(
-            self.get_parameter('scan_timeout_sec').value
-        )
-        if (
-            self.scan_stamp <= 0.0
-            or now - self.scan_stamp > scan_timeout
-        ):
+        if scan_age > scan_hard:
             self.publish_stop('FRONT_LIDAR_TIMEOUT')
             return
 
@@ -1859,6 +1877,8 @@ class OvertakeFusion(Node):
             health['rear_ok']
             and health['imu_ok']
             and health['boundary_ok']
+            and not raw_degraded
+            and not scan_degraded
         )
         self.overtake_allowed_pub.publish(
             Bool(data=overtake_allowed)
@@ -2707,6 +2727,22 @@ class OvertakeFusion(Node):
 
         if self.state == OvertakeState.CRUISE and center_active:
             speed = min(speed, center_speed_limit)
+
+        if raw_degraded or scan_degraded:
+            speed = min(
+                speed,
+                float(
+                    self.get_parameter(
+                        'sensor_soft_speed_mps'
+                    ).value
+                ),
+            )
+            degraded = []
+            if raw_degraded:
+                degraded.append('RAW')
+            if scan_degraded:
+                degraded.append('SCAN')
+            mode = f"{mode}:SOFT_TIMEOUT_{'+'.join(degraded)}"
 
         lateral_limit_fresh = (
             self.lateral_limit_stamp > 0.0
