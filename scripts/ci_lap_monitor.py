@@ -22,10 +22,12 @@ class Monitor(Node):
         self.current_lap_time = 0.0
 
         self.start_allowed = None
+        self.start_state = 'UNKNOWN'
         self.red_ratio = None
         self.road_confidence = None
         self.overtake_state = 'UNKNOWN'
         self.controller_mode = 'UNKNOWN'
+        self.control_authority = 'UNKNOWN'
         self.boundary_confidence = None
         self.imu_yaw_rate = None
         self.imu_lateral_accel = None
@@ -263,6 +265,7 @@ class Monitor(Node):
                 f'wall_l={self.left_wall_distance} wall_r={self.right_wall_distance} '
                 f'front={self.front_clearance} stop={self.stop_reason} '
                 f'lat_limit={self.lateral_speed_limit} hairpin={self.hairpin_direction} '
+                f'start_state={self.start_state} authority={self.control_authority} '
                 f'mode={self.controller_mode} overtake={self.overtake_state}',
                 flush=True,
             )
@@ -284,10 +287,12 @@ class Monitor(Node):
         print(f'avg_speed_mps={avg:.3f}')
         print(f'max_speed_mps={self.max_speed:.3f}')
         print(f'camera_start_allowed={self.start_allowed}')
+        print(f'camera_start_state={self.start_state}')
         print(f'camera_red_ratio={self.red_ratio}')
         print(f'camera_road_confidence={self.road_confidence}')
         print(f'overtake_state={self.overtake_state}')
         print(f'controller_mode={self.controller_mode}')
+        print(f'control_authority={self.control_authority}')
         print(f'boundary_confidence={self.boundary_confidence}')
         print(f'imu_yaw_rate_rad_s={self.imu_yaw_rate}')
         print(f'imu_lateral_accel_mps2={self.imu_lateral_accel}')
