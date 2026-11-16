@@ -158,15 +158,8 @@ def generate_launch_description():
             output='screen'
         ),
 
-        # Existing LiDAR racer becomes the base-path controller.
-        Node(
-            package='urrc_lidar_racer',
-            executable='lidar_racer',
-            name='lidar_racer',
-            parameters=[racer_config],
-            output='screen'
-        ),
-
+        # Only one command publisher is allowed. Legacy lidar_racer and
+        # overtake_fusion must NOT run in parallel with stable_drive.
         Node(
             package='urrc_lidar_racer',
             executable='camera_perception',
@@ -177,9 +170,8 @@ def generate_launch_description():
 
         Node(
             package='urrc_lidar_racer',
-            executable='overtake_fusion',
-            name='overtake_fusion',
-            parameters=[fusion_config],
+            executable='stable_drive',
+            name='stable_drive',
             output='screen'
         ),
 
