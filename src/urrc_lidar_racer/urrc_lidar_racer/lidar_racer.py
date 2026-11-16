@@ -1326,12 +1326,8 @@ class LidarRacer(Node):
             if abs(p[0] - target_x) <= window
         ]
 
-        if not candidates:
-            candidates = sorted(
-                points,
-                key=lambda p: abs(p[0] - target_x),
-            )[:2]
-
+        # Do not extrapolate a nonexistent wall segment to a requested
+        # preview distance: that generated phantom headings near Monaco walls.
         if not candidates:
             return None
 
