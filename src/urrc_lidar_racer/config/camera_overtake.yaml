@@ -29,7 +29,7 @@ overtake_fusion:
     # IMU 고속 자세 안정화
     imu_stability_enable: true
     imu_timeout_sec: 0.30
-    imu_fail_speed_mps: 8.0
+    imu_fail_speed_mps: 3.0
     imu_lateral_soft_mps2: 12.0
     imu_lateral_hard_mps2: 20.0
     imu_roll_soft_deg: 7.0
@@ -48,17 +48,17 @@ overtake_fusion:
     fusion_lidar_min_confidence: 0.25
     fusion_camera_min_weight: 0.20
     sensor_degraded_confidence: 0.20
-    sensor_degraded_speed_mps: 4.0
+    sensor_degraded_speed_mps: 1.50
 
     # 센서 상태 감시 / Fail-safe
     camera_timeout_sec: 0.60
     boundary_timeout_sec: 0.50
     rear_scan_timeout_sec: 0.50
-    camera_fail_speed_mps: 12.0
-    rear_lidar_fail_speed_mps: 10.0
-    multi_sensor_fail_speed_mps: 4.0
+    camera_fail_speed_mps: 3.0
+    rear_lidar_fail_speed_mps: 3.0
+    multi_sensor_fail_speed_mps: 1.5
 
-    camera_fallback_speed_mps: 3.00
+    camera_fallback_speed_mps: 1.50
 
     # 벽 위험구역 회피: 평상시 보정 0°, 위험구역에서만 회피
     center_align_enable: true
@@ -71,22 +71,22 @@ overtake_fusion:
     wall_danger_release_m: 0.68
     wall_danger_min_steer_deg: 2.0
     wall_danger_max_steer_deg: 7.0
-    wall_danger_speed_mps: 2.5
+    wall_danger_speed_mps: 1.50
     wall_danger_critical_m: 0.30
-    wall_danger_critical_speed_mps: 1.2
+    wall_danger_critical_speed_mps: 0.80
     wall_danger_rate_deg_s: 6.0
     wall_danger_confirm_frames: 8
 
     max_steer_deg: 30.0
     straight_steer_deadband_deg: 2.5
-    max_speed_mps: 15.00
+    max_speed_mps: 5.00
     raw_cmd_timeout_sec: 0.35
     scan_timeout_sec: 0.25
     raw_cmd_soft_timeout_sec: 0.35
     raw_cmd_hard_timeout_sec: 1.00
     scan_soft_timeout_sec: 0.35
     scan_hard_timeout_sec: 1.00
-    sensor_soft_speed_mps: 2.50
+    sensor_soft_speed_mps: 1.50
     lateral_limit_timeout_sec: 0.50
     emergency_stop_m: 1.00
     front_min_valid_range_m: 0.25
@@ -95,7 +95,7 @@ overtake_fusion:
     front_emergency_confirm_frames: 3
     hard_ttc_sec: 0.30
     reaction_time_sec: 0.25
-    brake_decel_mps2: 10.0
+    brake_decel_mps2: 4.0
     safety_margin_m: 0.50
     overtake_trigger_m: 17.50
     overtake_trigger_margin_m: 2.00
@@ -131,7 +131,7 @@ overtake_fusion:
     defense_lane_target: 0.12
     defense_max_sec: 1.00
     defense_cooldown_sec: 2.00
-    defense_speed_mps: 12.0
+    defense_speed_mps: 3.0
     defense_front_clear_m: 8.0
     defense_side_clear_m: 1.00
     defense_max_base_steer_deg: 7.5
@@ -149,8 +149,9 @@ overtake_fusion:
     pass_corridor_min_m: 1.00
     overtake_cooldown_sec: 1.50
 
+    # Monaco 초기 검증: 모터 가속·속도 상한을 5m/s 이하로 제한
     # 최종 명령 평활화
-    final_accel_limit_mps2: 10.0
+    final_accel_limit_mps2: 3.0
     final_decel_limit_mps2: 4.0
     final_steer_rate_deg_s: 45.0
     stop_hold_sec: 0.40
@@ -163,7 +164,7 @@ overtake_fusion:
     pass_lane_target: 0.30
     fallback_shift_bias_deg: 3.5
     fallback_return_bias_deg: 3.0
-    shift_speed_mps: 10.00
-    overtake_speed_mps: 15.00
-    return_speed_mps: 10.00
+    shift_speed_mps: 3.00
+    overtake_speed_mps: 5.00
+    return_speed_mps: 3.00
     start_gate_enable: true
