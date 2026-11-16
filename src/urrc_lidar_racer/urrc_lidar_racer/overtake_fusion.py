@@ -48,7 +48,7 @@ class OvertakeFusion(Node):
 
             'camera_gain_deg': 12.0,
             'camera_min_confidence': 0.35,
-            'camera_fallback_enable': True,
+            'camera_fallback_enable': False,
 
             # Confidence-based LiDAR + camera steering fusion.
             'boundary_confidence_topic': '/race/continuous_boundary_confidence',
@@ -65,7 +65,7 @@ class OvertakeFusion(Node):
             'rear_lidar_fail_speed_mps': 3.0,
             'multi_sensor_fail_speed_mps': 1.5,
 
-            'camera_fallback_speed_mps': 1.50,
+            'camera_fallback_speed_mps': 0.00,
 
             # Wall danger-zone avoidance only.
             # Outside the danger zone this layer adds zero steering.
@@ -203,6 +203,9 @@ class OvertakeFusion(Node):
         self.camera_stamp = 0.0
         self.boundary_confidence = 0.0
         self.boundary_stamp = 0.0
+        self.path_valid = False
+        self.path_valid_stamp = 0.0
+        self.path_valid_streak = 0
         self.lateral_speed_limit = float(
             self.get_parameter('max_speed_mps').value
         )
@@ -287,6 +290,12 @@ class OvertakeFusion(Node):
             ),
             self.on_boundary_confidence,
             10,
+        )
+        self.create_subscription(
+            Bool,
+            '/race/path_valid',
+            self.on_path_valid,
+            20,
         )
         self.create_subscription(
             Float32,
@@ -457,6 +466,14 @@ class OvertakeFusion(Node):
             np.clip(msg.data, 0.0, 1.0)
         )
         self.boundary_stamp = self.now_sec()
+
+    def on_path_valid(self, msg):
+        self.path_valid = bool(msg.data)
+        self.path_valid_stamp = self.now_sec()
+        if self.path_valid:
+            self.path_valid_streak = min(10, self.path_valid_streak + 1)
+        else:
+            self.path_valid_streak = 0
 
     def on_lateral_speed_limit(self, msg):
         self.lateral_speed_limit = float(np.clip(
@@ -1891,6 +1908,16 @@ class OvertakeFusion(Node):
             and not self.start_allowed
         ):
             self.publish_stop('WAIT_START')
+            return
+
+        # Stability-first interlock: a camera-visible road is NOT proof that
+        # the commanded heading is safe. Never drive on a lost/old wall pair.
+        path_fresh = (
+            self.path_valid_stamp > 0.0
+            and now - self.path_valid_stamp <= 0.30
+        )
+        if not path_fresh or not self.path_valid or self.path_valid_streak < 3:
+            self.publish_stop('PATH_UNVERIFIED')
             return
 
         health = self.sensor_health(now)
