@@ -6,7 +6,7 @@ from rcl_interfaces.msg import SetParametersResult
 
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist, Point
-from std_msgs.msg import Float32
+from std_msgs.msg import Bool, Float32
 
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
@@ -82,6 +82,10 @@ class LidarRacer(Node):
             Float32,
             '/race/continuous_boundary_confidence',
             10
+        )
+        # Signal path validity separately from a numeric zero-speed command.
+        self.path_valid_pub = self.create_publisher(
+            Bool, '/race/path_valid', 10
         )
         # RViz Marker
         self.marker_pub = self.create_publisher(
@@ -403,6 +407,8 @@ class LidarRacer(Node):
             right,
             target,
         )
+
+        self.path_valid_pub.publish(Bool(data=direction_result is not None))
 
         if direction_result is None:
             if self.hairpin_active and hairpin_steer_deg is not None:
@@ -840,6 +846,7 @@ class LidarRacer(Node):
     def handle_track_loss(self, msg):
 
         self.miss_count += 1
+        self.path_valid_pub.publish(Bool(data=False))
         if self.miss_count > self.loss_slow_frames:
             self.reversal_guard.reset()
 
