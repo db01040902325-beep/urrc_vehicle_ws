@@ -84,8 +84,6 @@ class OvertakeFusion(Node):
             'wall_danger_critical_speed_mps': 1.2,
             'wall_danger_rate_deg_s': 6.0,
             'wall_danger_confirm_frames': 8,
-            'wall_danger_width_min_m': 0.90,
-            'wall_danger_width_max_m': 3.50,
 
             'max_steer_deg': 30.0,
             'straight_steer_deadband_deg': 2.5,
@@ -511,14 +509,8 @@ class OvertakeFusion(Node):
         ]
         return values
 
-    def wall_center_measurement(self):
-        """Measure perpendicular distance to both guardrails.
-
-        Positive center error means the left wall is farther away than the
-        right wall, so the vehicle is too far right. Negative means too far
-        left. The correction uses the same sign convention as the existing
-        LiDAR wall-centering controller.
-        """
+    def wall_danger_measurement(self):
+        """Measure each side wall independently in the near-side sector."""
         scan = self.scan
         if scan is None or not scan.ranges:
             return None
@@ -567,33 +559,40 @@ class OvertakeFusion(Node):
             elif angle < 0.0:
                 right.append(lateral)
 
-        if len(left) < 4 or len(right) < 4:
+        if len(left) < 4 and len(right) < 4:
             return None
 
         percentile = float(
             self.get_parameter('center_wall_percentile').value
         )
-        left_distance = float(np.percentile(left, percentile))
-        right_distance = float(np.percentile(right, percentile))
+        left_distance = (
+            float(np.percentile(left, percentile))
+            if len(left) >= 4
+            else float('inf')
+        )
+        right_distance = (
+            float(np.percentile(right, percentile))
+            if len(right) >= 4
+            else float('inf')
+        )
 
-        center_error = 0.5 * (
-            left_distance - right_distance
+        center_error = (
+            0.5 * (left_distance - right_distance)
+            if math.isfinite(left_distance)
+            and math.isfinite(right_distance)
+            else 0.0
         )
 
         return left_distance, right_distance, center_error
 
-    def center_alignment(self):
-        """Wall danger-zone avoidance.
-
-        This no longer tries to center the vehicle. When both walls are
-        outside the danger zone, this layer contributes exactly zero steering.
-        """
+    def wall_danger_avoidance(self):
+        """Avoid only a confirmed nearby wall; never center the vehicle."""
         if not bool(
             self.get_parameter('center_align_enable').value
         ):
             return 0.0, float('inf'), False
 
-        measurement = self.wall_center_measurement()
+        measurement = self.wall_danger_measurement()
         if measurement is None:
             self.center_align_active = False
             self.wall_danger_side = 0
@@ -612,10 +611,22 @@ class OvertakeFusion(Node):
             Float32(data=float(center_error))
         )
         self.left_wall_pub.publish(
-            Float32(data=float(left_distance))
+            Float32(
+                data=(
+                    float(left_distance)
+                    if math.isfinite(left_distance)
+                    else -1.0
+                )
+            )
         )
         self.right_wall_pub.publish(
-            Float32(data=float(right_distance))
+            Float32(
+                data=(
+                    float(right_distance)
+                    if math.isfinite(right_distance)
+                    else -1.0
+                )
+            )
         )
 
         enter = float(
@@ -625,30 +636,25 @@ class OvertakeFusion(Node):
             self.get_parameter('wall_danger_release_m').value
         )
 
-        width = left_distance + right_distance
-        width_ok = (
-            float(
-                self.get_parameter(
-                    'wall_danger_width_min_m'
-                ).value
-            )
-            <= width
-            <= float(
-                self.get_parameter(
-                    'wall_danger_width_max_m'
-                ).value
-            )
+        left_danger = (
+            math.isfinite(left_distance)
+            and left_distance < enter
+        )
+        right_danger = (
+            math.isfinite(right_distance)
+            and right_distance < enter
         )
 
-        if width_ok and left_distance < enter and right_distance >= enter:
-            self.wall_left_danger_frames += 1
-        else:
-            self.wall_left_danger_frames = 0
-
-        if width_ok and right_distance < enter and left_distance >= enter:
-            self.wall_right_danger_frames += 1
-        else:
-            self.wall_right_danger_frames = 0
+        self.wall_left_danger_frames = (
+            self.wall_left_danger_frames + 1
+            if left_danger
+            else 0
+        )
+        self.wall_right_danger_frames = (
+            self.wall_right_danger_frames + 1
+            if right_danger
+            else 0
+        )
 
         confirm_frames = int(
             self.get_parameter(
@@ -656,28 +662,41 @@ class OvertakeFusion(Node):
             ).value
         )
 
-        # Hysteresis + temporal confirmation. A single odd LiDAR return must
-        # never cause a lane-change-like steering event.
         if self.center_align_active:
             tracked = (
                 left_distance
                 if self.wall_danger_side < 0
                 else right_distance
             )
-            if tracked >= release or not width_ok:
+            if (
+                not math.isfinite(tracked)
+                or tracked >= release
+            ):
                 self.center_align_active = False
                 self.wall_danger_side = 0
                 self.center_filtered_correction = 0.0
         else:
-            if self.wall_left_danger_frames >= confirm_frames:
-                # Left wall danger -> steer right (negative).
-                self.wall_danger_side = -1
+            left_confirmed = (
+                self.wall_left_danger_frames >= confirm_frames
+            )
+            right_confirmed = (
+                self.wall_right_danger_frames >= confirm_frames
+            )
+
+            if left_confirmed or right_confirmed:
+                if left_confirmed and right_confirmed:
+                    self.wall_danger_side = (
+                        -1
+                        if left_distance <= right_distance
+                        else 1
+                    )
+                elif left_confirmed:
+                    self.wall_danger_side = -1
+                else:
+                    self.wall_danger_side = 1
+
                 self.center_align_active = True
                 self.wall_left_danger_frames = 0
-            elif self.wall_right_danger_frames >= confirm_frames:
-                # Right wall danger -> steer left (positive).
-                self.wall_danger_side = 1
-                self.center_align_active = True
                 self.wall_right_danger_frames = 0
 
         if not self.center_align_active:
@@ -1927,7 +1946,7 @@ class OvertakeFusion(Node):
             center_correction,
             center_speed_limit,
             center_active,
-        ) = self.center_alignment()
+        ) = self.wall_danger_avoidance()
 
         vehicle = self.front_vehicle_candidate()
         if vehicle is None:
