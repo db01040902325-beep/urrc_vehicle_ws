@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 
 PREVIEW_PARTITION = re.compile(r'^urrc_v19_preview_[0-9a-f]{10}$')
 
@@ -47,7 +48,7 @@ def find_partition(track):
 
 def main():
     parser = argparse.ArgumentParser(description='기존 urrc_2 v24 preview에 차량 수동 연결')
-    parser.add_argument('action', choices=('check', 'spawn', 'start'))
+    parser.add_argument('action', choices=('check', 'spawn', 'start', 'signal'))
     parser.add_argument('--track', choices=('monza', 'hungaroring', 'monaco'), required=True)
     parser.add_argument('--grid', type=int, default=1)
     args = parser.parse_args()
@@ -69,6 +70,36 @@ def main():
             str(map_root / 'src/urrc_track_gazebo/models'),
             env.get('GZ_SIM_RESOURCE_PATH', ''),
         )))
+        if args.action == 'signal':
+            # Replay the existing map's official five-red model; do not modify urrc_2.
+            signal_file = map_root / f'src/urrc_track_gazebo/worlds/{args.track}_signal_active.sdf'
+            if not signal_file.is_file():
+                raise RuntimeError(f'신호등 템플릿이 없습니다: {signal_file}')
+            nodes = subprocess.run(['ros2', 'node', 'list'], env=env,
+                                   capture_output=True, text=True, timeout=10)
+            running = set(nodes.stdout.splitlines()) if nodes.returncode == 0 else set()
+            required = {'/camera_perception', '/overtake_fusion'}
+            missing = required - running
+            if missing:
+                raise RuntimeError('출발 노드를 먼저 실행하십시오: ' + ', '.join(sorted(missing)))
+            sys.path.insert(0, str(map_root / 'race/scripts'))
+            from atomic_signal_v10 import AtomicFiveRed
+            # The map's signal implementation uses the inherited partition.
+            os.environ['GZ_PARTITION'] = partition
+            gate = AtomicFiveRed(map_root, args.track)
+            try:
+                gate.start()
+                for index in range(1, 6):
+                    gate.red(index)
+                    print(f'[URRC VEHICLE] RED {index}/5', flush=True)
+                    time.sleep(1.0)
+                time.sleep(1.0)
+                gate.all_off()
+                print('[URRC VEHICLE] LIGHTS OUT', flush=True)
+            except BaseException:
+                gate.cleanup_on_error()
+                raise
+            return 0
         if args.action == 'start':
             cmd = ['ros2', 'launch', 'urrc_lidar_racer',
                    'race_camera_overtake.launch.py', 'rviz:=false']
