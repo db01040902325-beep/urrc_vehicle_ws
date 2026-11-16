@@ -3,19 +3,19 @@ lidar_racer:
 
     # 차량
     wheelbase: 0.330
-    track_width: 1.50
+    track_width: 2.40
     max_steer_deg: 30.0
 
     # 조향 안정화
     steer_ema_alpha: 0.45
     max_steer_step_deg: 5.0
 
-    # Adaptive Lookahead
-    lookahead_straight: 10.50
-    lookahead_medium: 6.50
-    lookahead_sharp: 3.00
-    lookahead_medium_threshold_deg: 6.0
-    lookahead_sharp_threshold_deg: 14.0
+    # 도로 중앙 위치가 아니라 4m→10m 구간의 진행방향 변화만 조향에 사용
+    direction_near_x_m: 4.0
+    direction_far_x_m: 10.0
+    direction_steer_gain: 1.40
+    direction_deadband_deg: 1.50
+    direction_max_steer_deg: 24.0
 
     # 속도
     speed_straight: 15.00
@@ -35,12 +35,7 @@ lidar_racer:
     high_speed_steer_soft_limit_deg: 10.0
     high_speed_steer_threshold_mps: 12.0
 
-    # 전방 코너 예측
-    preview_distance: 16.0
-    preview_min_x: 3.00
-    preview_max_x: 24.00
-    preview_max_pair_dx: 1.50
-
+    # 도로 진행방향 변화에 따른 선행 감속
     preview_speed_4deg: 10.00
     preview_speed_7deg: 8.00
     preview_speed_12deg: 6.00
@@ -103,21 +98,9 @@ lidar_racer:
     boundary_max_abs_y_m: 3.50
     boundary_min_x_m: 0.35
     boundary_max_x_m: 32.0
-    boundary_pair_min_width_m: 0.90
-    boundary_pair_max_width_m: 4.50
+    boundary_pair_min_width_m: 1.80
+    boundary_pair_max_width_m: 3.00
     boundary_near_window_m: 2.00
-    boundary_target_ema_alpha: 0.45
-
-    # 장거리 벽 추적 실패 시 좌우 가드레일 거리로 중앙 유지
-    side_wall_fallback_enable: false
-    side_wall_angle_min_deg: 55.0
-    side_wall_angle_max_deg: 88.0
-    side_wall_percentile: 20.0
-    side_wall_min_distance_m: 0.25
-    side_wall_max_distance_m: 4.50
-    side_wall_target_x_m: 3.00
-    side_wall_max_offset_m: 0.90
-    side_wall_fallback_speed_mps: 4.00
 
     # Track-loss
     loss_hold_frames: 2
