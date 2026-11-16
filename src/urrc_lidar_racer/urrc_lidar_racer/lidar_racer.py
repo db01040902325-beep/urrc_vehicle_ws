@@ -163,12 +163,6 @@ class LidarRacer(Node):
             'hairpin_open_ratio': 1.25,
             'hairpin_direction_agreement_deg': 2.0,
 
-            'front_stop_distance': 1.00,
-            'front_slow_distance': 4.00,
-            'ttc_stop_sec': 0.30,
-            'ttc_slow_sec': 1.10,
-            'emergency_slow_speed': 2.50,
-
             'lidar_max_use_range': 36.0,
             'cluster_gap': 0.18,
             'cluster_max_width': 0.22,
@@ -554,24 +548,9 @@ class LidarRacer(Node):
         lateral_msg.data = float(lateral_speed_limit)
         self.lateral_speed_pub.publish(lateral_msg)
 
-        front_min = self.front_distance(msg)
-
-        # ==========================================
-        # TTC + 거리 기반 안전제어
-        # ==========================================
-
-        if math.isfinite(front_min):
-            ttc = front_min / max(speed, 0.05)
-        else:
-            ttc = float('inf')
-
-        # 즉시 정지
-        if front_min < self.front_stop_distance or ttc < self.ttc_stop_sec:
-            speed = 0.0
-
-        # 위험 접근
-        elif front_min < self.front_slow_distance or ttc < self.ttc_slow_sec:
-            speed = min(speed, self.emergency_slow_speed)
+        # Front collision / TTC safety is intentionally owned only by
+        # overtake_fusion. The base path controller must not independently
+        # stop and accidentally trigger fallback logic.
 
         # 사용자 조향 -> Gazebo 좌표계
         delta_gazebo = math.radians(
