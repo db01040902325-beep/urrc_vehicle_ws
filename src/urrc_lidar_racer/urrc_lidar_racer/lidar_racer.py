@@ -10,6 +10,7 @@ from std_msgs.msg import Float32
 
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
+from .steering_guard import SteeringReversalGuard
 
 
 class LidarRacer(Node):
@@ -100,6 +101,8 @@ class LidarRacer(Node):
 
             'steer_ema_alpha': 0.45,
             'max_steer_step_deg': 5.0,
+            'steer_reversal_deadband_deg': 3.0,
+            'steer_reversal_confirm_frames': 3,
 
             # Steering uses road-direction change, never lateral centering.
             'direction_near_x_m': 4.0,
@@ -209,6 +212,10 @@ class LidarRacer(Node):
         # Steering smoothing
         self.filtered_steer_deg = 0.0
         self.last_speed = 0.0
+        self.reversal_guard = SteeringReversalGuard(
+            self.steer_reversal_deadband_deg,
+            self.steer_reversal_confirm_frames,
+        )
 
         # EMA: 클수록 새 조향값을 빠르게 반영
         self.steer_ema_alpha = float(self.steer_ema_alpha)
@@ -408,6 +415,20 @@ class LidarRacer(Node):
             steer_user_deg = float(hairpin_steer_deg)
 
         self.miss_count = 0
+
+        # Reject isolated opposite-sign sensor noise on ordinary corners.
+        # A true sustained direction change is accepted after 3 scans.
+        # Hairpin detection overrides this guard for prompt safe turning.
+        if self.hairpin_active:
+            self.reversal_guard.reset()
+        else:
+            self.reversal_guard.deadband_deg = float(
+                self.steer_reversal_deadband_deg
+            )
+            self.reversal_guard.confirm_frames = max(
+                1, int(self.steer_reversal_confirm_frames)
+            )
+            steer_user_deg = self.reversal_guard.filter(steer_user_deg)
 
         steer_user_deg = max(
             -self.max_steer_deg,
@@ -819,6 +840,8 @@ class LidarRacer(Node):
     def handle_track_loss(self, msg):
 
         self.miss_count += 1
+        if self.miss_count > self.loss_slow_frames:
+            self.reversal_guard.reset()
 
         # A lost wall pair must never preserve a possibly wrong steering
         # command. Recover in a straight line at low speed.
