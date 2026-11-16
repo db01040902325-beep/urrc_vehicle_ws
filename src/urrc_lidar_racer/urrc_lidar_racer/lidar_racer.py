@@ -844,71 +844,22 @@ class LidarRacer(Node):
     # =====================================================
 
     def handle_track_loss(self, msg):
-
+        """No blind straight-line motion when both track boundaries are unverified."""
         self.miss_count += 1
         self.path_valid_pub.publish(Bool(data=False))
-        if self.miss_count > self.loss_slow_frames:
-            self.reversal_guard.reset()
+        self.reversal_guard.reset()
+        self.filtered_steer_deg = 0.0
+        self.last_speed = 0.0
 
-        # A lost wall pair must never preserve a possibly wrong steering
-        # command. Recover in a straight line at low speed.
-        if self.miss_count <= self.loss_hold_frames:
-            speed = min(self.last_speed, self.loss_hold_speed)
-            steer = 0.0
-            self.filtered_steer_deg = 0.0
-
-        elif self.miss_count <= self.loss_slow_frames:
-            speed = self.loss_slow_speed
-            steer = 0.0
-            self.filtered_steer_deg = 0.0
-
-        else:
-            front = self.front_distance(msg)
-            if (
-                not math.isfinite(front)
-                or front > float(self.loss_recovery_front_clear_m)
-            ):
-                speed = float(self.loss_recovery_speed)
-                steer = 0.0
-            else:
-                speed = 0.0
-                steer = 0.0
-
-            self.filtered_steer_deg = 0.0
-
-        delta_gazebo = math.radians(-steer)
-
-        if speed <= 0.0:
-            yaw_rate = 0.0
-        else:
-            yaw_rate = (
-                speed
-                * math.tan(delta_gazebo)
-                / self.wheelbase
-            )
-
-        cmd = Twist()
-        cmd.linear.x = speed
-        cmd.angular.z = yaw_rate
-
-        self.cmd_pub.publish(cmd)
-
-        speed_msg = Float32()
-        speed_msg.data = float(speed)
-        self.speed_pub.publish(speed_msg)
-
-        self.last_speed = speed
-
-        steer_msg = Float32()
-        steer_msg.data = float(steer)
-        self.steer_pub.publish(steer_msg)
-
-        self.last_speed = speed
+        self.cmd_pub.publish(Twist())
+        self.speed_pub.publish(Float32(data=0.0))
+        self.steer_pub.publish(Float32(data=0.0))
 
         self.get_logger().warn(
-            f'Track boundary lost: frame={self.miss_count}',
-            throttle_duration_sec=0.5
+            f'Track boundary lost: frame={self.miss_count}; commanding STOP',
+            throttle_duration_sec=0.5,
         )
+
 
     # =====================================================
     # RViz markers
