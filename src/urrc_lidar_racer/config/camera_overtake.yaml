@@ -41,7 +41,7 @@ overtake_fusion:
     imu_steer_damping: 0.70
     camera_gain_deg: 12.0
     camera_min_confidence: 0.35
-    camera_fallback_enable: true
+    camera_fallback_enable: false
 
     # LiDAR + 카메라 신뢰도 기반 융합
     boundary_confidence_topic: /race/continuous_boundary_confidence
@@ -58,7 +58,7 @@ overtake_fusion:
     rear_lidar_fail_speed_mps: 3.0
     multi_sensor_fail_speed_mps: 1.5
 
-    camera_fallback_speed_mps: 1.50
+    camera_fallback_speed_mps: 0.00
 
     # 벽 위험구역 회피: 평상시 보정 0°, 위험구역에서만 회피
     center_align_enable: true
