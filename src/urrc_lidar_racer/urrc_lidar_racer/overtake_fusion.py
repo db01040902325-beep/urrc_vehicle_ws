@@ -66,7 +66,6 @@ class OvertakeFusion(Node):
             'multi_sensor_fail_speed_mps': 4.0,
 
             'camera_fallback_speed_mps': 3.00,
-            'camera_fallback_gain_scale': 1.45,
 
             # Wall danger-zone avoidance only.
             # Outside the danger zone this layer adds zero steering.
