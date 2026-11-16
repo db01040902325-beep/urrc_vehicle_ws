@@ -59,7 +59,6 @@ overtake_fusion:
     multi_sensor_fail_speed_mps: 4.0
 
     camera_fallback_speed_mps: 3.00
-    camera_fallback_gain_scale: 1.45
 
     # 벽 위험구역 회피: 평상시 보정 0°, 위험구역에서만 회피
     center_align_enable: true
