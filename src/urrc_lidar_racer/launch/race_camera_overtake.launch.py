@@ -198,13 +198,6 @@ def generate_launch_description():
         ),
 
         Node(
-            package='urrc_lidar_racer',
-            executable='birdseye_view',
-            name='birdseye_view',
-            output='screen'
-        ),
-
-        Node(
             package='rviz2',
             executable='rviz2',
             name='rviz2',
