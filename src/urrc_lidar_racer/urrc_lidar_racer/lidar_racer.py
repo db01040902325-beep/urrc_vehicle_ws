@@ -82,12 +82,6 @@ class LidarRacer(Node):
             '/race/continuous_boundary_confidence',
             10
         )
-        self.fallback_mode_pub = self.create_publisher(
-            Float32,
-            '/race/side_wall_fallback_active',
-            10
-        )
-
         # RViz Marker
         self.marker_pub = self.create_publisher(
             MarkerArray,
@@ -101,17 +95,18 @@ class LidarRacer(Node):
 
         defaults = {
             'wheelbase': 0.330,
-            'track_width': 1.50,
+            'track_width': 2.40,
             'max_steer_deg': 30.0,
 
             'steer_ema_alpha': 0.45,
             'max_steer_step_deg': 5.0,
 
-            'lookahead_straight': 10.50,
-            'lookahead_medium': 6.50,
-            'lookahead_sharp': 3.00,
-            'lookahead_medium_threshold_deg': 6.0,
-            'lookahead_sharp_threshold_deg': 14.0,
+            # Steering uses road-direction change, never lateral centering.
+            'direction_near_x_m': 4.0,
+            'direction_far_x_m': 10.0,
+            'direction_steer_gain': 1.40,
+            'direction_deadband_deg': 1.50,
+            'direction_max_steer_deg': 24.0,
 
             'speed_straight': 15.00,
             'speed_curve_1': 10.00,
@@ -128,11 +123,6 @@ class LidarRacer(Node):
             'lateral_stability_deadband_deg': 3.0,
             'high_speed_steer_soft_limit_deg': 10.0,
             'high_speed_steer_threshold_mps': 12.0,
-
-            'preview_distance': 16.0,
-            'preview_min_x': 3.00,
-            'preview_max_x': 24.00,
-            'preview_max_pair_dx': 1.50,
 
             'preview_speed_4deg': 10.00,
             'preview_speed_7deg': 8.00,
@@ -196,21 +186,9 @@ class LidarRacer(Node):
             'boundary_max_abs_y_m': 3.50,
             'boundary_min_x_m': 0.35,
             'boundary_max_x_m': 32.0,
-            'boundary_pair_min_width_m': 0.90,
-            'boundary_pair_max_width_m': 4.50,
+            'boundary_pair_min_width_m': 1.80,
+            'boundary_pair_max_width_m': 3.00,
             'boundary_near_window_m': 2.00,
-            'boundary_target_ema_alpha': 0.45,
-
-            # Robust side-wall centering fallback.
-            'side_wall_fallback_enable': False,
-            'side_wall_angle_min_deg': 55.0,
-            'side_wall_angle_max_deg': 88.0,
-            'side_wall_percentile': 20.0,
-            'side_wall_min_distance_m': 0.25,
-            'side_wall_max_distance_m': 4.50,
-            'side_wall_target_x_m': 3.00,
-            'side_wall_max_offset_m': 0.90,
-            'side_wall_fallback_speed_mps': 4.00,
 
             'loss_hold_frames': 2,
             'loss_slow_frames': 5,
@@ -234,14 +212,9 @@ class LidarRacer(Node):
         self.track_width = float(self.track_width)
         self.max_steer_deg = float(self.max_steer_deg)
 
-        # Adaptive lookahead
-        self.lookahead = 1.70
-
         # Steering smoothing
         self.filtered_steer_deg = 0.0
         self.last_speed = 0.0
-        self.filtered_target_y = 0.0
-        self.have_filtered_target = False
 
         # EMA: 클수록 새 조향값을 빠르게 반영
         self.steer_ema_alpha = float(self.steer_ema_alpha)
@@ -271,7 +244,7 @@ class LidarRacer(Node):
         )
 
         self.get_logger().info(
-            'LiDAR racer started: RIGHT=+, LEFT=-'
+            'LiDAR direction follower started: straight=0deg, RIGHT=+, LEFT=-'
         )
 
     def parameter_callback(self, params):
@@ -378,61 +351,35 @@ class LidarRacer(Node):
         )
 
         # ==========================================
-        # Adaptive Lookahead
-        # 직선에서는 멀리 보고,
-        # 급코너에서는 가까이 봄
+        # Direction-only path steering
+        #
+        # The vehicle is NOT pulled toward the road center. Two valid
+        # left/right wall pairs are sampled at different forward distances
+        # and only the change in road direction is used for steering.
+        # Therefore an off-center grid start still commands 0 deg on a
+        # straight.
         # ==========================================
 
-        previous_steer = abs(self.filtered_steer_deg)
-
-        if previous_steer < self.lookahead_medium_threshold_deg:
-            self.lookahead = self.lookahead_straight
-
-        elif previous_steer < self.lookahead_sharp_threshold_deg:
-            self.lookahead = self.lookahead_medium
-
-        else:
-            self.lookahead = self.lookahead_sharp
-
-        target = self.find_center(left, right)
-        side_fallback_active = False
-
-        if (
-            target is None
-            and bool(self.side_wall_fallback_enable)
-        ):
-            target = self.side_wall_fallback_target(msg)
-            side_fallback_active = target is not None
-
-        self.fallback_mode_pub.publish(
-            Float32(
-                data=1.0 if side_fallback_active else 0.0
-            )
-        )
-
-        # ==========================================
-        # 2~4m 전방 코너 예측
-        # ==========================================
-        preview_target = self.find_preview_target(
+        direction_result = self.directional_curve_steer(
             left,
-            right
+            right,
         )
 
-        if preview_target is not None:
-            preview_x, preview_y = preview_target
-
-            preview_angle_deg = math.degrees(
-                math.atan2(
-                    preview_y,
-                    preview_x
-                )
-            )
+        if direction_result is None:
+            target = None
+            path_heading_deg = 0.0
+            steer_user_deg = 0.0
         else:
-            preview_angle_deg = 0.0
+            (
+                steer_user_deg,
+                path_heading_deg,
+                target,
+            ) = direction_result
 
-        preview_msg = Float32()
-        preview_msg.data = float(preview_angle_deg)
-        self.preview_pub.publish(preview_msg)
+        preview_angle_deg = float(path_heading_deg)
+        self.preview_pub.publish(
+            Float32(data=preview_angle_deg)
+        )
 
         (
             curve_prediction_deg,
@@ -450,67 +397,23 @@ class LidarRacer(Node):
             Float32(data=float(curve_speed_limit))
         )
 
-        # RViz 표시
         self.publish_markers(
             left,
             right,
-            target
+            target,
         )
 
-        if target is None:
+        if direction_result is None:
             if self.hairpin_active and hairpin_steer_deg is not None:
-                # Keep the steering pipeline alive through a sharp corner
-                # even when the normal x-binned left/right boundary pair
-                # disappears. Hairpin steering below will override this
-                # synthetic straight-ahead target.
                 target = (3.0, 0.0)
-                side_fallback_active = False
+                steer_user_deg = float(hairpin_steer_deg)
             else:
                 self.handle_track_loss(msg)
                 return
-
-        # 정상 검출로 복귀
-        self.miss_count = 0
-
-        target_x, target_y = target
-
-        # Target lateral low-pass filtering prevents wall-scan jitter from
-        # turning into high-speed steering oscillation.
-        alpha = float(self.boundary_target_ema_alpha)
-        if not self.have_filtered_target:
-            self.filtered_target_y = float(target_y)
-            self.have_filtered_target = True
-        else:
-            self.filtered_target_y = (
-                alpha * float(target_y)
-                + (1.0 - alpha) * self.filtered_target_y
-            )
-        target_y = self.filtered_target_y
-
-        # Pure Pursuit
-        ld2 = target_x * target_x + target_y * target_y
-
-        if ld2 < 0.05:
-            self.stop()
-            return
-
-        delta_left = math.atan2(
-            2.0 * self.wheelbase * target_y,
-            ld2
-        )
-
-        delta_left_deg = math.degrees(delta_left)
-
-        # 사용자 기준:
-        # + = 우회전
-        # - = 좌회전
-        steer_user_deg = -delta_left_deg
-
-        # Hairpin override: when a broad wall closes the lane ahead, normal
-        # x-binned wall tracking becomes unreliable. Use the side opening
-        # direction until the corner is entered.
-        if self.hairpin_active and hairpin_steer_deg is not None:
+        elif self.hairpin_active and hairpin_steer_deg is not None:
             steer_user_deg = float(hairpin_steer_deg)
+
+        self.miss_count = 0
 
         steer_user_deg = max(
             -self.max_steer_deg,
@@ -570,13 +473,6 @@ class LidarRacer(Node):
             speed = min(
                 speed,
                 float(hairpin_speed_limit),
-            )
-
-        # Side-wall fallback is deliberately conservative.
-        if side_fallback_active:
-            speed = min(
-                speed,
-                float(self.side_wall_fallback_speed_mps),
             )
 
         # ==========================================
@@ -938,87 +834,6 @@ class LidarRacer(Node):
         )
 
     # =====================================================
-    # Side-wall fallback centering
-    # =====================================================
-
-    def side_wall_fallback_target(self, msg):
-        """Use side guardrail distance symmetry when long-range fitting fails."""
-        angle_min = math.radians(
-            float(self.side_wall_angle_min_deg)
-        )
-        angle_max = math.radians(
-            float(self.side_wall_angle_max_deg)
-        )
-        percentile = float(self.side_wall_percentile)
-
-        left_ranges = []
-        right_ranges = []
-
-        for i, distance in enumerate(msg.ranges):
-            if not math.isfinite(distance):
-                continue
-            if (
-                distance < msg.range_min
-                or distance > min(
-                    msg.range_max,
-                    float(self.side_wall_max_distance_m),
-                )
-            ):
-                continue
-
-            angle = msg.angle_min + i * msg.angle_increment
-            abs_angle = abs(angle)
-
-            if not angle_min <= abs_angle <= angle_max:
-                continue
-
-            lateral_distance = abs(
-                distance * math.sin(angle)
-            )
-
-            if (
-                lateral_distance
-                < float(self.side_wall_min_distance_m)
-                or lateral_distance
-                > float(self.side_wall_max_distance_m)
-            ):
-                continue
-
-            if angle > 0.0:
-                left_ranges.append(lateral_distance)
-            elif angle < 0.0:
-                right_ranges.append(lateral_distance)
-
-        if not left_ranges or not right_ranges:
-            return None
-
-        left_distance = self.percentile(
-            left_ranges,
-            percentile,
-        )
-        right_distance = self.percentile(
-            right_ranges,
-            percentile,
-        )
-
-        offset = 0.5 * (
-            left_distance - right_distance
-        )
-
-        max_offset = float(
-            self.side_wall_max_offset_m
-        )
-        offset = max(
-            -max_offset,
-            min(max_offset, offset),
-        )
-
-        return (
-            float(self.side_wall_target_x_m),
-            float(offset),
-        )
-
-    # =====================================================
     # Temporary track-loss recovery
     # =====================================================
 
@@ -1026,20 +841,18 @@ class LidarRacer(Node):
 
         self.miss_count += 1
 
-        # 1~2 frame:
-        # 직전 조향을 잠깐 유지하면서 감속
+        # A lost wall pair must never preserve a possibly wrong steering
+        # command. Recover in a straight line at low speed.
         if self.miss_count <= self.loss_hold_frames:
             speed = min(self.last_speed, self.loss_hold_speed)
-            steer = self.filtered_steer_deg
+            steer = 0.0
+            self.filtered_steer_deg = 0.0
 
-        # 3~5 frame:
-        # 매우 저속으로 직전 방향 유지
         elif self.miss_count <= self.loss_slow_frames:
             speed = self.loss_slow_speed
-            steer = self.filtered_steer_deg
+            steer = 0.0
+            self.filtered_steer_deg = 0.0
 
-        # 장시간 검출 실패:
-        # 전방이 비어 있으면 1 m/s 직진 복구를 계속 시도한다.
         else:
             front = self.front_distance(msg)
             if (
@@ -1053,7 +866,6 @@ class LidarRacer(Node):
                 steer = 0.0
 
             self.filtered_steer_deg = 0.0
-            self.have_filtered_target = False
 
         delta_gazebo = math.radians(-steer)
 
@@ -1341,30 +1153,22 @@ class LidarRacer(Node):
             points.append(point)
             previous_x = point[0]
 
-        if len(points) < 2:
+        if len(points) < 3:
             return 0.0, float(self.speed_straight)
 
         headings = []
-        previous = (0.0, 0.0)
 
-        for point in points:
-            dx = point[0] - previous[0]
-            dy = point[1] - previous[1]
+        for index in range(1, len(points)):
+            dx = points[index][0] - points[index - 1][0]
+            dy = points[index][1] - points[index - 1][1]
             if dx <= 0.20 or math.hypot(dx, dy) < 0.50:
                 continue
             headings.append(math.atan2(dy, dx))
-            previous = point
 
-        if not headings:
+        if len(headings) < 2:
             return 0.0, float(self.speed_straight)
 
-        # Use change in path heading, not absolute far-point heading.
-        # Absolute heading can be large when one side boundary is temporarily
-        # missing even though the road itself is still straight.
         candidates = []
-
-        if headings:
-            candidates.append(headings[0])
 
         for index in range(1, len(headings)):
             candidates.append(
@@ -1547,47 +1351,81 @@ class LidarRacer(Node):
         right,
         target_x,
     ):
+        """Return road center only when both walls form a plausible pair.
+
+        Single-wall extrapolation was removed because it can create a phantom
+        center roughly half a track width toward a wall and cause an abrupt
+        steering command immediately after the start.
+        """
         lp = self.boundary_near_distance(left, target_x)
         rp = self.boundary_near_distance(right, target_x)
 
+        if lp is None or rp is None:
+            return None
+
+        width = lp[1] - rp[1]
         min_width = float(self.boundary_pair_min_width_m)
         max_width = float(self.boundary_pair_max_width_m)
 
-        if lp is not None and rp is not None:
-            width = lp[1] - rp[1]
+        if not min_width <= width <= max_width:
+            return None
 
-            if min_width <= width <= max_width:
-                return (
-                    0.5 * (lp[0] + rp[0]),
-                    0.5 * (lp[1] + rp[1]),
-                )
+        return (
+            0.5 * (lp[0] + rp[0]),
+            0.5 * (lp[1] + rp[1]),
+        )
 
-            # If one wall is temporarily contaminated by another object,
-            # trust the side whose absolute lateral position is more
-            # consistent with a track boundary.
-            if abs(lp[1]) >= abs(rp[1]):
-                return (
-                    lp[0],
-                    lp[1] - self.track_width / 2.0,
-                )
-            return (
-                rp[0],
-                rp[1] + self.track_width / 2.0,
+    def directional_curve_steer(self, left, right):
+        """Steer from road direction change, not from lateral road-center error."""
+        near = self.center_from_boundaries(
+            left,
+            right,
+            float(self.direction_near_x_m),
+        )
+        far = self.center_from_boundaries(
+            left,
+            right,
+            float(self.direction_far_x_m),
+        )
+
+        if near is None or far is None:
+            return None
+
+        dx = far[0] - near[0]
+        dy = far[1] - near[1]
+
+        if dx <= 0.50:
+            return None
+
+        path_heading_deg = math.degrees(
+            math.atan2(dy, dx)
+        )
+
+        deadband = float(self.direction_deadband_deg)
+        if abs(path_heading_deg) <= deadband:
+            steer = 0.0
+        else:
+            # LiDAR +y is vehicle-left while user steering convention is
+            # RIGHT=+, LEFT=-.
+            steer = (
+                -float(self.direction_steer_gain)
+                * path_heading_deg
             )
 
-        if lp is not None:
-            return (
-                lp[0],
-                lp[1] - self.track_width / 2.0,
-            )
+        max_direction_steer = min(
+            float(self.max_steer_deg),
+            float(self.direction_max_steer_deg),
+        )
+        steer = max(
+            -max_direction_steer,
+            min(max_direction_steer, steer),
+        )
 
-        if rp is not None:
-            return (
-                rp[0],
-                rp[1] + self.track_width / 2.0,
-            )
-
-        return None
+        return (
+            float(steer),
+            float(path_heading_deg),
+            far,
+        )
 
     # =====================================================
     # LiDAR clustering
@@ -1763,41 +1601,6 @@ class LidarRacer(Node):
     # =====================================================
     # Track center
     # =====================================================
-
-    def find_preview_target(
-        self,
-        left,
-        right
-    ):
-        target = self.center_from_boundaries(
-            left,
-            right,
-            float(self.preview_distance),
-        )
-
-        if target is None:
-            return None
-
-        if not (
-            self.preview_min_x
-            <= target[0]
-            <= self.preview_max_x
-        ):
-            return None
-
-        return target
-
-
-    def find_center(
-        self,
-        left,
-        right
-    ):
-        return self.center_from_boundaries(
-            left,
-            right,
-            float(self.lookahead),
-        )
 
     # =====================================================
     # Front safety
