@@ -73,12 +73,7 @@ lidar_racer:
     hairpin_open_ratio: 1.25
     hairpin_direction_agreement_deg: 2.0
 
-    # 안전
-    front_stop_distance: 1.00
-    front_slow_distance: 4.00
-    ttc_stop_sec: 0.30
-    ttc_slow_sec: 1.10
-    emergency_slow_speed: 2.50
+    # 전방 충돌/TTC 안전은 overtake_fusion에서 단일 관리
 
     # LiDAR 인식
     lidar_max_use_range: 36.0
