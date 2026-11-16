@@ -41,6 +41,7 @@ setup(
     entry_points={
         'console_scripts': [
             'lidar_racer = urrc_lidar_racer.lidar_racer:main',
+            'stable_drive = urrc_lidar_racer.stable_drive:main',
             'camera_perception = urrc_lidar_racer.camera_perception:main',
             'overtake_fusion = urrc_lidar_racer.overtake_fusion:main',
             'race_stats = urrc_lidar_racer.race_stats:main',
