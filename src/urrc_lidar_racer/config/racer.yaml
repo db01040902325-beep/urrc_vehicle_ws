@@ -7,22 +7,22 @@ lidar_racer:
     max_steer_deg: 30.0
 
     # 조향 안정화
-    steer_ema_alpha: 0.45
-    max_steer_step_deg: 5.0
+    steer_ema_alpha: 0.35
+    max_steer_step_deg: 3.0
 
-    # 도로 중앙 위치가 아니라 4m→10m 구간의 진행방향 변화만 조향에 사용
-    direction_near_x_m: 4.0
-    direction_far_x_m: 10.0
-    direction_steer_gain: 1.40
+    # Monaco 저속 검증: 중앙 복귀 대신 2.5m→6m 구간의 진행방향을 추종
+    direction_near_x_m: 2.5
+    direction_far_x_m: 6.0
+    direction_steer_gain: 1.10
     direction_deadband_deg: 1.50
     direction_max_steer_deg: 24.0
 
     # 속도
-    speed_straight: 15.00
-    speed_curve_1: 10.00
-    speed_curve_2: 8.00
-    speed_curve_3: 6.00
-    speed_sharp: 4.50
+    speed_straight: 5.00
+    speed_curve_1: 3.00
+    speed_curve_2: 2.50
+    speed_curve_3: 2.00
+    speed_sharp: 1.50
 
     speed_threshold_1_deg: 2.0
     speed_threshold_2_deg: 5.0
@@ -30,28 +30,28 @@ lidar_racer:
     speed_threshold_4_deg: 18.0
 
     # 고속 안정화: 조향각 기반 횡가속도 제한
-    lateral_accel_limit_mps2: 18.0
-    lateral_stability_deadband_deg: 3.0
+    lateral_accel_limit_mps2: 6.0
+    lateral_stability_deadband_deg: 0.0
     high_speed_steer_soft_limit_deg: 10.0
     high_speed_steer_threshold_mps: 12.0
 
     # 도로 진행방향 변화에 따른 선행 감속
-    preview_speed_4deg: 10.00
-    preview_speed_7deg: 8.00
-    preview_speed_12deg: 6.00
-    preview_speed_18deg: 4.50
+    preview_speed_4deg: 3.00
+    preview_speed_7deg: 2.50
+    preview_speed_12deg: 2.00
+    preview_speed_18deg: 1.50
 
-    # 15 m/s 고속 코너 선행예측
+    # Monaco 5m/s 저속 코너 선행예측
     curve_prediction_enable: true
-    curve_near_distance: 8.0
-    curve_mid_distance: 16.0
-    curve_far_distance: 24.0
+    curve_near_distance: 4.0
+    curve_mid_distance: 8.0
+    curve_far_distance: 12.0
     curve_soft_deg: 4.0
     curve_medium_deg: 8.0
     curve_hard_deg: 14.0
-    curve_speed_soft: 10.0
-    curve_speed_medium: 8.0
-    curve_speed_hard: 6.0
+    curve_speed_soft: 3.00
+    curve_speed_medium: 2.50
+    curve_speed_hard: 2.00
     curve_min_confidence: 0.25
 
     # 급코너/헤어핀: 전방을 가로막는 넓은 벽 + 열린 측면으로 방향 판단
@@ -66,7 +66,7 @@ lidar_racer:
     hairpin_min_open_m: 2.00
     hairpin_steer_min_deg: 10.0
     hairpin_steer_max_deg: 26.0
-    hairpin_speed_mps: 3.5
+    hairpin_speed_mps: 1.50
     hairpin_confirm_frames: 2
     hairpin_release_frames: 4
     hairpin_min_speed_mps: 1.0
@@ -97,8 +97,10 @@ lidar_racer:
     boundary_pair_max_width_m: 3.00
     boundary_near_window_m: 2.00
 
-    # Track-loss
+    # Track-loss: 경계가 지속해서 보이지 않으면 벽 방향 직진을 금지
     loss_hold_frames: 2
     loss_slow_frames: 5
-    loss_hold_speed: 3.00
-    loss_slow_speed: 1.80
+    loss_hold_speed: 1.50
+    loss_slow_speed: 0.80
+    loss_recovery_speed: 0.00
+    loss_recovery_front_clear_m: 1.25
