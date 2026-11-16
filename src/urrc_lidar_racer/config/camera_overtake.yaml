@@ -76,8 +76,6 @@ overtake_fusion:
     wall_danger_critical_speed_mps: 1.2
     wall_danger_rate_deg_s: 6.0
     wall_danger_confirm_frames: 8
-    wall_danger_width_min_m: 0.90
-    wall_danger_width_max_m: 3.50
 
     max_steer_deg: 30.0
     straight_steer_deadband_deg: 2.5
