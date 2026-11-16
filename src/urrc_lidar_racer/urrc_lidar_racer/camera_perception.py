@@ -45,6 +45,9 @@ class CameraPerception(Node):
         self.last_confidence = 0.0
         self.last_red_ratio = 0.0
         self.last_lamp_count = 0
+        self.current_lamp_centers = ()
+        self.armed_lamp_centers = ()
+        self.lamp_roi_dimensions = (1, 1)
         self.start_allowed = (
             self.start_state == 'RACING'
         )
@@ -241,6 +244,8 @@ class CameraPerception(Node):
         y1 = max(1, min(h, y1))
 
         roi = frame[0:y1, x0:x1]
+        self.current_lamp_centers = ()
+        self.lamp_roi_dimensions = (x1 - x0, y1)
         if roi.size == 0:
             return 0, 0.0
 
@@ -309,6 +314,9 @@ class CameraPerception(Node):
             if span < 0.10 * roi.shape[1]:
                 return 0, raw_ratio
 
+        self.current_lamp_centers = tuple(
+            (float(blob[0]), float(blob[1])) for blob in best_row[:5]
+        )
         return min(5, len(best_row)), raw_ratio
 
     def update_start_gate(self, lamp_count):
@@ -347,6 +355,9 @@ class CameraPerception(Node):
             if self.full_on_frames >= seen_need:
                 self.start_state = 'FIVE_LIGHTS_ON'
                 self.full_on_seen = True
+                # Record the actual five lamp positions at the instant the
+                # camera arms. Roadside red barriers can remain after OFF.
+                self.armed_lamp_centers = self.current_lamp_centers[:5]
                 self.off_frames = 0
                 self.get_logger().info(
                     'Start state -> FIVE_LIGHTS_ON'
@@ -355,7 +366,24 @@ class CameraPerception(Node):
             return
 
         if self.start_state == 'FIVE_LIGHTS_ON':
-            if lamp_count <= off_max:
+            # Only compare the same five lamp positions captured at ON.
+            # Counting every red blob also counts permanent red curbs.
+            matched = 0
+            available = list(self.current_lamp_centers)
+            roi_w, roi_h = self.lamp_roi_dimensions
+            tolerance_x = max(5.0, 0.012 * roi_w)
+            tolerance_y = max(5.0, 0.025 * roi_h)
+            for target_x, target_y in self.armed_lamp_centers:
+                for index, (x, y) in enumerate(available):
+                    if (abs(x - target_x) <= tolerance_x
+                            and abs(y - target_y) <= tolerance_y):
+                        matched += 1
+                        available.pop(index)
+                        break
+            # When a previous run was not armed by the camera, fail closed.
+            if not self.armed_lamp_centers:
+                matched = lamp_count
+            if matched <= off_max:
                 self.off_frames += 1
             else:
                 self.off_frames = 0
