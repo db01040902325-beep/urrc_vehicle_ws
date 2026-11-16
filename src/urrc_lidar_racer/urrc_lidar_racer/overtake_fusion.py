@@ -35,7 +35,7 @@ class OvertakeFusion(Node):
             # IMU high-speed stabilization.
             'imu_stability_enable': True,
             'imu_timeout_sec': 0.30,
-            'imu_fail_speed_mps': 8.0,
+            'imu_fail_speed_mps': 3.0,
             'imu_lateral_soft_mps2': 12.0,
             'imu_lateral_hard_mps2': 20.0,
             'imu_roll_soft_deg': 7.0,
@@ -55,17 +55,17 @@ class OvertakeFusion(Node):
             'fusion_lidar_min_confidence': 0.25,
             'fusion_camera_min_weight': 0.20,
             'sensor_degraded_confidence': 0.20,
-            'sensor_degraded_speed_mps': 4.0,
+            'sensor_degraded_speed_mps': 1.5,
 
             # Sensor health / fail-safe.
             'camera_timeout_sec': 0.60,
             'boundary_timeout_sec': 0.50,
             'rear_scan_timeout_sec': 0.50,
-            'camera_fail_speed_mps': 12.0,
-            'rear_lidar_fail_speed_mps': 10.0,
-            'multi_sensor_fail_speed_mps': 4.0,
+            'camera_fail_speed_mps': 3.0,
+            'rear_lidar_fail_speed_mps': 3.0,
+            'multi_sensor_fail_speed_mps': 1.5,
 
-            'camera_fallback_speed_mps': 3.00,
+            'camera_fallback_speed_mps': 1.50,
 
             # Wall danger-zone avoidance only.
             # Outside the danger zone this layer adds zero steering.
@@ -79,22 +79,22 @@ class OvertakeFusion(Node):
             'wall_danger_release_m': 0.68,
             'wall_danger_min_steer_deg': 2.0,
             'wall_danger_max_steer_deg': 7.0,
-            'wall_danger_speed_mps': 2.5,
+            'wall_danger_speed_mps': 1.50,
             'wall_danger_critical_m': 0.30,
-            'wall_danger_critical_speed_mps': 1.2,
+            'wall_danger_critical_speed_mps': 0.80,
             'wall_danger_rate_deg_s': 6.0,
             'wall_danger_confirm_frames': 8,
 
             'max_steer_deg': 30.0,
             'straight_steer_deadband_deg': 2.5,
-            'max_speed_mps': 15.00,
+            'max_speed_mps': 5.00,
             'raw_cmd_timeout_sec': 0.35,
             'scan_timeout_sec': 0.25,
             'raw_cmd_soft_timeout_sec': 0.35,
             'raw_cmd_hard_timeout_sec': 1.00,
             'scan_soft_timeout_sec': 0.35,
             'scan_hard_timeout_sec': 1.00,
-            'sensor_soft_speed_mps': 2.50,
+            'sensor_soft_speed_mps': 1.50,
             'lateral_limit_timeout_sec': 0.50,
 
             'emergency_stop_m': 1.00,
@@ -104,7 +104,7 @@ class OvertakeFusion(Node):
             'front_emergency_confirm_frames': 3,
             'hard_ttc_sec': 0.30,
             'reaction_time_sec': 0.25,
-            'brake_decel_mps2': 10.0,
+            'brake_decel_mps2': 4.0,
             'safety_margin_m': 0.50,
 
             'overtake_trigger_m': 17.50,
@@ -140,7 +140,7 @@ class OvertakeFusion(Node):
             'defense_lane_target': 0.12,
             'defense_max_sec': 1.00,
             'defense_cooldown_sec': 2.00,
-            'defense_speed_mps': 12.0,
+            'defense_speed_mps': 3.0,
             'defense_front_clear_m': 8.0,
             'defense_side_clear_m': 1.00,
             'defense_max_base_steer_deg': 7.5,
@@ -159,8 +159,8 @@ class OvertakeFusion(Node):
             'overtake_cooldown_sec': 1.50,
 
             # Final actuator smoothing.
-            'final_accel_limit_mps2': 10.0,
-            'final_decel_limit_mps2': 10.0,
+            'final_accel_limit_mps2': 3.0,
+            'final_decel_limit_mps2': 4.0,
             'final_steer_rate_deg_s': 45.0,
             'stop_hold_sec': 0.40,
             'stop_speed_deadband_mps': 0.20,
@@ -176,9 +176,9 @@ class OvertakeFusion(Node):
             'fallback_shift_bias_deg': 3.5,
             'fallback_return_bias_deg': 3.0,
 
-            'shift_speed_mps': 10.00,
-            'overtake_speed_mps': 15.00,
-            'return_speed_mps': 10.00,
+            'shift_speed_mps': 3.00,
+            'overtake_speed_mps': 5.00,
+            'return_speed_mps': 3.00,
 
             'start_gate_enable': True,
         }
