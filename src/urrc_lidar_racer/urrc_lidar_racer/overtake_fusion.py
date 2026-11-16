@@ -2067,12 +2067,10 @@ class OvertakeFusion(Node):
             if self.state != OvertakeState.CRUISE:
                 self.set_state(OvertakeState.CRUISE)
 
-            wall_steer = (
-                0.25 * steer
-                + center_correction
-            )
+            # Wall danger has exclusive steering authority.
+            # Do not mix the previous path command back toward the wall.
             wall_steer = float(np.clip(
-                wall_steer,
+                center_correction,
                 -math.radians(10.0),
                 math.radians(10.0),
             ))
@@ -2117,21 +2115,9 @@ class OvertakeFusion(Node):
             and base_speed <= 0.05
             and self.camera_confidence >= minimum_conf
         ):
-            correction = self.camera_correction(
-                0.0,
-                float(
-                    self.get_parameter(
-                        'camera_fallback_gain_scale'
-                    ).value
-                ),
-            )
-            steer = 0.0 if correction is None else correction
-            steer += center_correction
-            steer = float(np.clip(
-                steer,
-                -self.max_steer_rad(),
-                self.max_steer_rad(),
-            ))
+            # Camera fallback is a low-speed straight recovery only.
+            # It must not pull the car toward the visual road center.
+            steer = 0.0
             safe_limit = self.safe_speed_for_distance(front)
             speed = min(
                 fallback_speed,
@@ -2150,34 +2136,23 @@ class OvertakeFusion(Node):
         mode = self.state.name
 
         if self.state == OvertakeState.CRUISE:
-            # Outside a wall danger zone, ignore tiny steering noise and go
-            # straight. Camera correction is only added when the base path
-            # already indicates a real corner.
-            if not center_active:
-                straight_deadband = math.radians(
-                    float(
-                        self.get_parameter(
-                            'straight_steer_deadband_deg'
-                        ).value
-                    )
+            # Normal driving uses only LiDAR road-direction steering.
+            # Camera center offset is deliberately excluded here.
+            straight_deadband = math.radians(
+                float(
+                    self.get_parameter(
+                        'straight_steer_deadband_deg'
+                    ).value
                 )
-                if abs(steer) < straight_deadband:
-                    steer = 0.0
-                else:
-                    correction = self.camera_correction()
-                    if correction is not None:
-                        steer += correction
+            )
+            if abs(steer) < straight_deadband:
+                steer = 0.0
 
-            steer += center_correction
             steer = float(np.clip(
                 steer,
                 -self.max_steer_rad(),
                 self.max_steer_rad(),
             ))
-
-            if center_active:
-                speed = min(speed, center_speed_limit)
-                mode = 'WALL_AVOID'
 
             safe_limit = self.safe_speed_for_distance(front)
             self.safe_speed_pub.publish(
